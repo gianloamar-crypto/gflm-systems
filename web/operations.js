@@ -54,7 +54,7 @@ button("quick","✳ Texto de WhatsApp","chip")+
 '</div>';
 out+='<div class="ops-main-grid">';
 let alertContent='<div class="ops-risk-list">';
-if(risk.length){risk.slice(0,7).forEach(function(r,i){alertContent+='<div class="ops-risk"><div class="ops-risk-index">'+h(String(i+1).padStart(2,"0"))+'</div><div class="ops-risk-copy"><b>'+h(r.label)+'</b><small>'+h(r.meta)+'</small></div>'+badge(r.type,r.score>=95?"danger":"warm")+button("goto:"+r.module,"Revisar →","small")+'</div>';});}
+if(risk.length){risk.slice(0,7).forEach(function(r,i){alertContent+='<div class="ops-risk"><div class="ops-risk-index">'+h(String(i+1).padStart(2,"0"))+'</div><div class="ops-risk-copy"><b>'+h(r.label)+'</b><small>'+h(r.meta)+'</small></div>'+badge(r.type,r.score>=95?"danger":"warm")+button("wsp-alert:"+r.module+":"+r.id,"WhatsApp","small")+button("goto:"+r.module,"Ver →","small")+'</div>';});}
 else alertContent+='<div class="ops-blank"><b>Sin alertas críticas.</b><span>Los registros urgentes aparecerán aquí automáticamente.</span></div>';
 alertContent+='</div>';
 out+=panel("Prioridades que no deben esperar","BANDEJA DE CONTROL",alertContent,'ops-risk-panel')+'<div class="ops-side-panels">'+panel("Firma y conformidad","CONTROL DE EVIDENCIAS",
@@ -106,8 +106,25 @@ panel("Captura desde un chat","PEGAR · ANALIZAR · CONFIRMAR",'<p class="ops-de
 panel("Historial de apertura","CONTROL MANUAL",messageLog(),"")+
 '</div></div></div>';
 }
+function alertDraft(mod,id){
+ const r=get(mod,id);if(!r)return "";
+ if(mod==="requerimientos")return draftFor("requerimientos",id);
+ const subject=r.titulo||r.equipo||r.concepto||r.nombre||"Pendiente";
+ const due=r.vence||r.vencimiento||r.fin||r.proximo||r.entrega||"Por confirmar";
+ return "RECORDATORIO DE OBRA\nTipo: "+(A.models[mod]?.short||mod)+"\nObra: "+(r.obra||"No especificada")+"\nAsunto: "+subject+"\nFecha límite: "+due+"\nResponsable: "+(r.responsable||r.cliente||r.proveedor||"Por confirmar")+"\nReferencia: "+mod.toUpperCase()+"-"+id+"\nFavor confirmar atención y nuevo estado.";
+}
 function capture(text){
  const value=String(text||"").trim();if(!value)return {error:"Escribe o pega primero un mensaje."};
+ const ref=value.match(/(?:REQ[-# ]*|requerimiento\s*#?\s*)(\d+)/i);
+ if(ref){
+  const row=get("requerimientos",Number(ref[1]));
+  if(!row)return {error:"No existe el requerimiento REQ-"+ref[1]+" en este navegador."};
+  if(/ya\s+(?:compr[eé]|comprado)|se\s+compr[oó]/i.test(value))return {module:"requerimientos",update:{id:row.id,estado:"Comprado",text:value},data:{detalle:row.detalle}};
+  if(/ya\s+(?:entreg[ué]|entregado)|se\s+entreg[oó]/i.test(value))return {module:"requerimientos",update:{id:row.id,estado:"Entregado",text:value},data:{detalle:row.detalle}};
+  if(/cancelado|no\s+se\s+har[aá]/i.test(value))return {module:"requerimientos",update:{id:row.id,estado:"Cancelado",text:value},data:{detalle:row.detalle}};
+  if(/reprogramar|otro\s+d[ií]a|despu[eé]s/i.test(value))return {module:"requerimientos",editId:row.id,data:{detalle:row.detalle}};
+ }
+
  let amountMatch=value.match(/(?:s\/\s*|soles?\s*)(\d[\d.,]*)/i)||value.match(/(\d[\d.,]*)\s*(?:soles?|s\/)/i);
  let amount=amountMatch?Number(amountMatch[1].replace(/,(?=\d{3}(?:\D|$))/g,"").replace(",",".")):0;
  const isCash=/gast[eé]|pag[ué]|deposit|compra realizada|reembols|rendici[oó]n|factura pendiente|boleta pendiente/i.test(value)&&amount>0;
@@ -122,7 +139,7 @@ function openQuick(){
  if(document.getElementById("opsOverlay"))return;
  const div=document.createElement("div");div.className="ops-overlay";div.id="opsOverlay";div.innerHTML='<div class="ops-quick-dialog" role="dialog" aria-modal="true" aria-label="Captura rápida"><div class="ops-quick-top"><span class="ops-eyebrow">CAPTURA OPERATIVA</span>'+button("close-overlay","✕","small")+'</div><h2>De mensaje a registro.</h2><p>Pega o escribe una instrucción como si la enviaras por WhatsApp. Verás un borrador antes de guardarlo.</p><textarea class="ops-input ops-text" id="opsQuickText" rows="5" placeholder="Ej.: Necesito 40 bolsas de cemento para mañana / Gasté S/180 en flete, factura pendiente"></textarea><div class="ops-quick-footer">'+button("quick-parse","Preparar registro →","strong")+'</div><div id="opsQuickResult"></div></div>';document.body.appendChild(div);div.addEventListener("click",function(e){if(e.target===div)div.remove();});document.getElementById("opsQuickText").focus();
 }
-function displayCapture(parsed,where){const el=document.getElementById(where);if(!el)return;if(parsed.error){el.innerHTML='<div class="ops-error">'+h(parsed.error)+'</div>';return;}let typ=parsed.module==="caja"?"GASTO / INGRESO":"REQUERIMIENTO";el.innerHTML='<div class="ops-capture-result"><b>✓ Borrador detectado · '+h(typ)+'</b><p>'+h(parsed.data.concepto||parsed.data.detalle)+'</p>'+button("save-draft:"+parsed.module,"Revisar y guardar →","strong")+'</div>';window._gflmPendingCapture=parsed;}
+function displayCapture(parsed,where){const el=document.getElementById(where);if(!el)return;if(parsed.error){el.innerHTML='<div class="ops-error">'+h(parsed.error)+'</div>';return;}let typ=parsed.update?"CAMBIO DE ESTADO":parsed.editId?"REPROGRAMACIÓN":parsed.module==="caja"?"GASTO / INGRESO":"REQUERIMIENTO";el.innerHTML='<div class="ops-capture-result"><b>✓ Borrador detectado · '+h(typ)+'</b><p>'+h(parsed.data.concepto||parsed.data.detalle)+'</p>'+button(parsed.update?"confirm-status":parsed.editId?"edit-existing":"save-draft:"+parsed.module,parsed.update?"Confirmar "+h(parsed.update.estado):parsed.editId?"Revisar requerimiento →":"Revisar y guardar →","strong")+'</div>';window._gflmPendingCapture=parsed;}
 function markMessage(id){const m=state.messages.find(function(x){return String(x.id)===String(id);});if(!m)return;m.status="Confirmado por usuario";saveState();A.render();A.notify("Confirmación manual registrada en este navegador.");}
 function sendWhatsApp(){
  const number=phoneNumber(state.phone),input=document.getElementById("opsMessage"),value=input?.value.trim()||"";
@@ -147,6 +164,31 @@ function doAction(op){
  if(op.startsWith("channel:")){channel=op.slice(8);lastDraft="";A.render();return;}
  if(op==="send-whatsapp"){sendWhatsApp();return;}
  if(op==="parse"||op==="quick-parse"){const txt=document.getElementById(op==="parse"?"opsPaste":"opsQuickText")?.value||"";displayCapture(capture(txt),op==="parse"?"opsParsed":"opsQuickResult");return;}
+ if(op==="confirm-status"){
+  const parsed=window._gflmPendingCapture;
+  if(!parsed?.update){A.notify("No hay respuesta por confirmar.",true);return;}
+  const row=get("requerimientos",parsed.update.id);
+  if(!row){A.notify("El requerimiento ya no existe.",true);return;}
+  if(!window.confirm("¿Actualizar REQ-"+row.id+" a "+parsed.update.estado+"?"))return;
+  row.estado=parsed.update.estado;row.notas=(row.notas||"")+"\nRespuesta copiada de WhatsApp ["+new Date().toLocaleString("es-PE")+"]: "+parsed.update.text;row.updatedAt=new Date().toISOString();
+  A.saveAudit("RESPUESTA WSP CONFIRMADA","requerimientos",row);
+  window._gflmPendingCapture=null;
+  document.getElementById("opsOverlay")?.remove();
+  A.changePage("requerimientos");
+  A.notify("Estado actualizado con registro en bitácora local.");
+  return;
+ }
+ if(op==="edit-existing"){
+  const parsed=window._gflmPendingCapture;
+  if(!parsed?.editId)return;
+  document.getElementById("opsOverlay")?.remove();
+  A.changePage(parsed.module);A.showForm(parsed.module,parsed.editId);
+  return;
+ }
+ if(op.startsWith("wsp-alert:")){
+  const parts=op.slice(10).split(":");
+  channel=parts[0]==="caja"?"rendiciones":"requerimientos";lastDraft=alertDraft(parts[0],parts[1]);A.changePage("whatsapp");return;
+ }
  if(op.startsWith("save-draft:")){const parsed=window._gflmPendingCapture;if(!parsed||parsed.module!==op.slice(11)){A.notify("El borrador ya no está disponible.",true);return;}document.getElementById("opsOverlay")?.remove();A.changePage(parsed.module);A.showForm(parsed.module,null,parsed.data);return;}
  if(op.startsWith("repeat:")){openRepeat(op.slice(7));return;}
  if(op.startsWith("confirm:")){markMessage(op.slice(8));return;}
