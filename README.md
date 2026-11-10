@@ -39,3 +39,24 @@ Para correr interfaz: `python app.py`.
 ## Migración
 
 Reutiliza el SQLite de v1/v2 ubicado en el mismo directorio de usuario. El sistema agrega columnas y módulos sin borrar registros anteriores. Haz una copia de seguridad antes de actualizar.
+
+
+## Web v4 · Field Operations (Vercel)
+
+**URL:** https://gflm-systems.vercel.app
+
+La app web vive en \`web/\` y conserva el programa de escritorio Python/SQLite por separado. Esta revisión sustituye la portada genérica por un centro de mando de obra y agrega:
+
+- Prioridades según vencimientos, requerimientos críticos, comprobantes y actas sin verificar.
+- Actas de custodia, transferencias, retiros y devoluciones con espacios de firma para imprimir.
+- Valorizaciones, facturas por cobrar, retenciones y alertas.
+- Maquinaria: horómetro, combustible, costos y mantenimiento.
+- Centro WhatsApp con **un solo número de destino** y dos flujos (requerimientos / rendiciones), prellenado de mensajes, historial local de aperturas y confirmación manual de envíos.
+- Captura rápida: pega mensajes de WhatsApp o escribe «Gasté S/250 en flete, factura pendiente» / «Necesito 30 bolsas de cemento para mañana» para preparar un formulario editable que tú confirmas.
+- Fotografías desde cámara del teléfono y PDFs como evidencias vinculadas a registros, guardados en IndexedDB **solo en el navegador**. El archivo se identifica con SHA-256, pero no es una custodia inalterable ni una certificación legal.
+
+### Límites de esta versión
+
+**No uses información sensible real**: la web carece todavía de inicio de sesión, permisos de usuario y base de datos centralizada. Los datos son locales a cada navegador; borrar sus datos puede destruir los registros. El respaldo JSON actual **no** incluye fotos ni PDFs de IndexedDB: estos deben descargarse por separado. La bitácora y hash locales no sustituyen una auditoría del servidor. WhatsApp se abre con enlace \`wa.me\`: **no recibe mensajes automáticamente, no envía en segundo plano ni comprueba entrega**. La integración automática requiere autorización y configuración de Meta WhatsApp Cloud API, webhook y base de datos con autenticación.
+
+**Despliegue:** Vercel conectado a rama \`main\` del repositorio GitHub, con directorio raíz \`web\`.
