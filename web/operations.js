@@ -129,7 +129,8 @@ function sendWhatsApp(){
  if(!number){A.notify("Primero guarda un número Business válido (9 dígitos Perú o formato internacional).",true);document.getElementById("opsPhone")?.focus();return;}
  if(!value){A.notify("Escribe el mensaje antes de abrir WhatsApp.",true);return;}
  const href="https://wa.me/"+number+"?text="+encodeURIComponent(value);
- const win=window.open(href,"_blank","noopener,noreferrer");
+ const win=window.open(href,"_blank");
+ if(win)win.opener=null;
  if(!win){A.notify("Permite las ventanas emergentes para abrir WhatsApp.",true);return;}
  state.messages.unshift({id:Date.now().toString(36),channel:channel,text:value,at:new Date().toISOString(),status:"Enlace abierto · sin confirmar"});
  state.messages=state.messages.slice(0,80);saveState();A.render();A.notify("WhatsApp abierto. Confirma el envío dentro del chat.");
