@@ -2,7 +2,7 @@ import {SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY} from './config.js';
 import {weekdayReport, fuelCycles, stationRanking} from './analytics.mjs';
 import {debtStatus, validateDebtAction} from './debts.mjs';
 const ready=Boolean(SUPABASE_URL&&SUPABASE_PUBLISHABLE_KEY);const currency=n=>'S/ '+Number(n||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2});const fmt=n=>Number(n||0).toLocaleString('es-PE',{maximumFractionDigits:2});const today=()=>new Date().toLocaleDateString('en-CA',{timeZone:'America/Lima'});const $=s=>document.querySelector(s);const root=$('#root');
-let sb=null,user=null,demo=false,signupMode=false,isAdmin=false,myLicense=null,customerList=[],db={profiles:[],vehicles:[],shifts:[],movements:[],fuel:[],goals:[],maintenance:[],debts:[],debt_actions:[]},page='inicio',range='30';
+let sb=null,user=null,demo=false,signupMode=false,isAdmin=false,myLicense=null,customerList=[],presenceRows=[],usageEvents=[],usageDaily=[],usagePeriod='30',usageSampleLimited=false,activityTimer=null,lastOpenedUser=null,db={profiles:[],vehicles:[],shifts:[],movements:[],fuel:[],goals:[],maintenance:[],debts:[],debt_actions:[]},page='inicio',range='30';
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const toNum=v=>Math.round((Number(v)||0)*100)/100;
 const dateStr=s=>String(s||'').slice(0,10);
@@ -11,7 +11,7 @@ function account(){return db.profiles[0]?.display_name||user?.email||'Usuario'}
 function accountEnabled(a){return a?.status==='active'&&String(a.expires_at||'')>=today()}
 function accountState(a){if(!a||a.status==='pending')return 'Pendiente';if(a.status==='suspended')return 'Suspendida';if(a.status==='active'&&!accountEnabled(a))return 'Vencida';return 'Activa'}
 function freshDb(){return {profiles:[],vehicles:[],shifts:[],movements:[],fuel:[],goals:[],maintenance:[],debts:[],debt_actions:[]}}
-async function init(){if(ready){try{const {createClient}=await import('https://esm.sh/@supabase/supabase-js@2.57.4');sb=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true}});const {data}=await sb.auth.getUser();user=data.user;sb.auth.onAuthStateChange((_evt,session)=>{const id=session?.user?.id;if(id!==user?.id){user=session?.user||null;setTimeout(()=>refresh(),0)}})}catch(e){root.innerHTML='<div class="auth">No se pudo iniciar la conexión: '+esc(e.message)+'</div>';return}}await refresh()}
+async function init(){if(ready){try{const {createClient}=await import('https://esm.sh/@supabase/supabase-js@2.57.4');sb=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true}});const {data}=await sb.auth.getUser();user=data.user;sb.auth.onAuthStateChange((_evt,session)=>{const id=session?.user?.id;if(id!==user?.id){user=session?.user||null;setTimeout(()=>refresh(),0)}})}catch(e){root.innerHTML='<div class="auth">No se pudo iniciar la conexión: '+esc(e.message)+'</div>';return}}installActivityTracking();await refresh()}
 let dataError='';
 async function refresh(){
  if(user&&sb&&!demo){
@@ -28,13 +28,100 @@ async function refresh(){
     if(listing.error){console.error(listing.error.message);dataError='No se pudo consultar clientes.';customerList=[]}
     else customerList=(listing.data||[]).filter(a=>a.user_id!==user.id);
   }else customerList=[];
+  if(isAdmin){
+   const since=new Date(Date.now()-90*86400000).toISOString();
+   const [p,e,m]=await Promise.all([
+    sb.from('customer_presence').select('user_id,last_seen,active,page'),
+    sb.from('customer_activity').select('user_id,event,page,happened_at').gte('happened_at',since).order('happened_at',{ascending:false}).limit(10000),
+    sb.from('customer_usage_daily').select('user_id,day,active_seconds').gte('day',since.slice(0,10)).limit(15000)
+   ]);
+   presenceRows=p.data||[];usageEvents=e.data||[];usageDaily=m.data||[];
+   usageSampleLimited=usageEvents.length>=10000||usageDaily.length>=15000;
+   if(p.error||e.error||m.error){dataError='Error al cargar el reporte de actividad.';console.warn(p.error?.message,e.error?.message,m.error?.message)}
+  }else{presenceRows=[];usageEvents=[];usageDaily=[];usageSampleLimited=false}
   if(isAdmin||accountEnabled(myLicense)){
     const tables=Object.keys(db);
     const results=await Promise.all(tables.map(t=>sb.from(t).select('*').eq('user_id',user.id).order('created_at',{ascending:false})));
     results.forEach((r,i)=>{if(r.error){console.error(tables[i],r.error.message);db[tables[i]]=[];dataError='Algunos datos no se pudieron cargar.';}else db[tables[i]]=r.data||[]});
   }else {db=freshDb();if(isAdmin)page='administracion';}
   if(isAdmin&&page==='inicio'&&!db.vehicles.length)page='administracion';
- }else{isAdmin=false;myLicense=null;customerList=[];db=freshDb();}
+ }else{isAdmin=false;myLicense=null;customerList=[];presenceRows=[];usageEvents=[];usageDaily=[];db=freshDb();}
+ registerOpenForCurrentUser();
+ render();
+}
+function fmtLastUse(value){if(!value)return "Sin actividad";const d=new Date(value);return Number.isFinite(d.getTime())?new Intl.DateTimeFormat("es-PE",{timeZone:"America/Lima",day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}).format(d):"No disponible"}
+function formatUsageTime(seconds){const m=Math.round(Number(seconds||0)/60);return m<60?`${m} min`:`${Math.floor(m/60)} h ${String(m%60).padStart(2,"0")} min`}
+function presenceFor(id){return presenceRows.find(x=>x.user_id===id)||null}
+function isOnline(id){const p=presenceFor(id);return Boolean(p?.active&&p?.last_seen&&Date.now()-new Date(p.last_seen).getTime()<120000)}
+function usageFor(id,days=30){
+ const since=Date.now()-days*86400000,ev=usageEvents.filter(x=>x.user_id===id&&new Date(x.happened_at).getTime()>=since);
+ const daily=usageDaily.filter(x=>x.user_id===id&&new Date(x.day+"T12:00:00Z").getTime()>=since);
+ const pages={};ev.filter(x=>x.event==="pagina"&&x.page).forEach(x=>pages[x.page]=(pages[x.page]||0)+1);
+ return {online:isOnline(id),last:presenceFor(id)?.last_seen||null,
+ sessions:ev.filter(x=>x.event==="apertura").length,visits:ev.filter(x=>x.event==="pagina").length,
+ closes:ev.filter(x=>x.event==="jornada").length,fuel:ev.filter(x=>x.event==="combustible").length,
+ saved:ev.filter(x=>x.event!=="apertura"&&x.event!=="pagina").length,
+ days:new Set([...daily.filter(x=>x.active_seconds>0).map(x=>x.day),...ev.map(x=>String(x.happened_at).slice(0,10))]).size,
+ seconds:daily.reduce((sum,x)=>sum+Number(x.active_seconds||0),0),
+ modules:Object.entries(pages).sort((a,b)=>b[1]-a[1]).slice(0,5)};
+}
+function usageWeeklyBars(id){
+ let d=[];for(let n=6;n>=0;n--){const day=new Date(today()+"T12:00:00Z");day.setUTCDate(day.getUTCDate()-n);
+ const key=day.toISOString().slice(0,10),seconds=usageDaily.filter(x=>x.user_id===id&&x.day===key).reduce((sum,x)=>sum+Number(x.active_seconds||0),0);
+ const label=new Intl.DateTimeFormat("es-PE",{weekday:"short",timeZone:"UTC"}).format(day).replace(".","");
+ d.push({seconds,label})}
+ const max=Math.max(60,...d.map(x=>x.seconds));
+ return `<div class="activity-chart" role="img" aria-label="Minutos aproximados de uso activo de los últimos siete días">${d.map(x=>`<div class="activity-column"><span class="activity-value">${Math.round(x.seconds/60)}m</span><div class="activity-bar-track"><div class="activity-bar" style="height:${Math.round(x.seconds/max*100)}%"></div></div><span class="activity-day">${esc(x.label)}</span></div>`).join("")}</div>`;
+}
+function usageClientPanel(client){
+ const m=usageFor(client.user_id,Number(usagePeriod));
+ const names={inicio:"Inicio",cierre:"Cierre rápido",jornadas:"Jornadas",movimientos:"Movimientos",combustible:"Combustible",analisis:"Análisis",metas:"Metas",pagos:"Préstamos y pagos",mantenimiento:"Mantenimiento",configuracion:"Vehículo"};
+ const fields=[["Tiempo activo aprox.",formatUsageTime(m.seconds)],["Días con actividad",m.days],["Aperturas",m.sessions],["Páginas visitadas",m.visits],["Jornadas guardadas",m.closes],["Recargas guardadas",m.fuel],["Otros registros",Math.max(0,m.saved-m.closes-m.fuel)]];
+ return `<details class="client-usage"><summary><span>📊 Dashboard de actividad</span><span class="help">${m.sessions} aperturas · ${m.closes} cierres</span></summary><div class="client-metrics">${fields.map(([k,v])=>`<div class="client-metric"><small>${esc(k)}</small><strong>${esc(v)}</strong></div>`).join("")}</div><h3>Uso activo · últimos siete días</h3>${usageWeeklyBars(client.user_id)}<h3>Módulos más visitados</h3><div class="module-usage">${m.modules.length?m.modules.map(([p,n])=>`<span class="tag">${esc(names[p]||p)} · ${n}</span>`).join(""):'<span class="help">Sin visitas registradas</span>'}</div><p class="help">Minutos aproximados con la aplicación visible. Jornadas y recargas proceden de registros guardados. No se muestran ingresos, saldos ni datos financieros privados.</p></details>`;
+}
+function usageOverview(){
+ const metrics=customerList.map(x=>usageFor(x.user_id,Number(usagePeriod))),online=metrics.filter(x=>x.online).length;
+ const kpis=[["En línea ahora",online],["Con actividad",metrics.filter(x=>x.sessions||x.saved||x.seconds).length],["Tiempo de uso",formatUsageTime(metrics.reduce((n,x)=>n+x.seconds,0))],["Registros guardados",metrics.reduce((n,x)=>n+x.saved,0)]];
+ return `<section class="panel usage-overview"><div class="charttitle"><div><h2>Actividad de clientes</h2><p class="help">«En línea» significa actividad reciente (margen de 2 minutos). Los reportes se calculan desde que habilitamos el seguimiento.</p></div><div class="actions"><select id="usage-period" aria-label="Período de uso"><option value="7" ${usagePeriod==="7"?"selected":""}>7 días</option><option value="30" ${usagePeriod==="30"?"selected":""}>30 días</option><option value="90" ${usagePeriod==="90"?"selected":""}>90 días</option></select><button type="button" class="btn secondary" id="refresh-usage">Actualizar</button><button type="button" class="btn secondary" id="export-usage">Exportar CSV</button></div></div><div class="cards usage-cards">${kpis.map(([label,v],i)=>`<div class="card"><small>${esc(label)}</small><strong ${i===0?'id="online-clients"':""}>${esc(v)}</strong></div>`).join("")}</div>${usageSampleLimited?'<p class="notice">Límite de eventos alcanzado: los conteos pueden ser parciales para este período.</p>':""}</section>`;
+}
+function exportUsage(){
+ const headings=["Correo","Estado","En línea","Última actividad","Días analizados","Minutos activos aprox.","Días con actividad","Aperturas","Páginas visitadas","Jornadas guardadas","Recargas guardadas","Otros registros"];
+ const rows=customerList.map(c=>{const m=usageFor(c.user_id,Number(usagePeriod));return [c.email,accountState(c),m.online?"Sí":"No",fmtLastUse(m.last),usagePeriod,Math.round(m.seconds/60),m.days,m.sessions,m.visits,m.closes,m.fuel,Math.max(0,m.saved-m.closes-m.fuel)]});
+ const csv=[headings,...rows].map(r=>r.map(v=>'"'+String(v??"").replace(/"/g,'""')+'"').join(";")).join("\r\n");
+ const b=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`mi-ruta-pro-uso-${usagePeriod}dias.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+async function pollPresence(){
+ if(!sb||!user||!isAdmin||page!=="administracion"||document.hidden)return;
+ const {data,error}=await sb.from("customer_presence").select("user_id,last_seen,active,page");
+ if(error)return;presenceRows=data||[];
+ const counter=$("#online-clients");if(counter)counter.textContent=String(customerList.filter(x=>isOnline(x.user_id)).length);
+ document.querySelectorAll("[data-live-user]").forEach(el=>{const id=el.dataset.liveUser,p=presenceFor(id),online=isOnline(id);
+ el.textContent=online?"● En línea":"○ Desconectado";el.className="live-dot "+(online?"online":"offline");
+ const last=document.querySelector(`[data-last-seen-user="${id}"]`);if(last)last.textContent=p?.last_seen?"Última actividad: "+fmtLastUse(p.last_seen):"Sin actividad todavía"});
+}
+function recordUsageEvent(kind,pageName=null){
+ if(!sb||!user||demo)return;
+ sb.rpc("record_customer_visit",{p_kind:kind,p_page:pageName}).then(({error})=>{if(error)console.warn("Uso no registrado:",error.message)});
+}
+function touchPresence(active=true){
+ if(!sb||!user||demo)return;
+ sb.rpc("touch_customer_presence",{p_page:page||"inicio",p_active:Boolean(active)}).then(({error})=>{if(error)console.warn("Conexión no registrada:",error.message)});
+}
+function installActivityTracking(){
+ if(activityTimer)return;
+ activityTimer=setInterval(()=>{if(user&&sb&&!document.hidden)touchPresence(true);if(isAdmin)pollPresence()},45000);
+ document.addEventListener("visibilitychange",()=>{if(!user||!sb)return;if(document.hidden)touchPresence(false);else{touchPresence(true);if(isAdmin)pollPresence()}});
+ window.addEventListener("pagehide",()=>{if(user&&sb)touchPresence(false)});
+}
+function registerOpenForCurrentUser(){
+ if(!user||!sb||demo){lastOpenedUser=null;return}
+ if(lastOpenedUser!==user.id){lastOpenedUser=user.id;recordUsageEvent("apertura");if(!isAdmin&&page!=="administracion")recordUsageEvent("pagina",page)}
+ if(!document.hidden)touchPresence(true);
+}
+function visitPage(next){
+ if(!next||!user)return;const changed=next!==page;page=next;
+ if(changed&&next!=="administracion"&&!isAdmin)recordUsageEvent("pagina",next);
+ if(!document.hidden)touchPresence(true);
  render();
 }
 function loginView(){
@@ -63,7 +150,7 @@ function loginView(){
  };
 }
 const pages=[['inicio','▦','Inicio'],['cierre','✓','Cierre rápido'],['jornadas','🚘','Jornadas'],['movimientos','💳','Movimientos'],['combustible','⛽','Combustible'],['analisis','📊','Análisis de días'],['metas','🎯','Metas'],['pagos','💰','Préstamos y pagos'],['mantenimiento','🔧','Mantenimiento'],['configuracion','⚙️','Mi vehículo']];
-function shell(){root.innerHTML=`<div class="layout"><aside class="sidebar"><div class="brand">🚘 Mi Ruta <b>PRO</b></div>${(isAdmin?[...pages,['administracion','👑','Mis clientes']]:pages).map(([p,ico,label])=>`<button data-page="${p}" class="menu ${page===p?'active':''}">${ico} ${label}</button>`).join('')}</aside><main class="main"><header class="top"><div><h1 id="heading">${esc(pages.find(x=>x[0]===page)?.[2]||(page==='administracion'?'Mis clientes':'Inicio'))}</h1><p class="muted">${demo?'🧪 Modo demostración · Datos ficticios, no se guardan':'🔒 '+esc(account())+' · Datos privados de tu cuenta'}</p></div><div class="actions"><select id="range" aria-label="Período"><option value="7">7 días</option><option value="30">30 días</option><option value="90">90 días</option><option value="0">Todo</option></select><button id="signout" class="btn secondary">Salir</button></div></header><div id="db-warning"></div><div id="content"></div><footer class="foot">Mi Ruta PRO · GFLM Systems · Tu control, tu ganancia</footer></main></div>`;$('#range').value=range;$('#range').onchange=e=>{range=e.target.value;render()};$('#signout').onclick=async()=>{if(demo){demo=false;user=null;db={profiles:[],vehicles:[],shifts:[],movements:[],fuel:[],goals:[],maintenance:[],debts:[],debt_actions:[]}}else await sb.auth.signOut();user=null;render()};document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>{page=b.dataset.page;render()})}
+function shell(){root.innerHTML=`<div class="layout"><aside class="sidebar"><div class="brand">🚘 Mi Ruta <b>PRO</b></div>${(isAdmin?[...pages,['administracion','👑','Mis clientes']]:pages).map(([p,ico,label])=>`<button data-page="${p}" class="menu ${page===p?'active':''}">${ico} ${label}</button>`).join('')}</aside><main class="main"><header class="top"><div><h1 id="heading">${esc(pages.find(x=>x[0]===page)?.[2]||(page==='administracion'?'Mis clientes':'Inicio'))}</h1><p class="muted">${demo?'🧪 Modo demostración · Datos ficticios, no se guardan':'🔒 '+esc(account())+' · Datos privados de tu cuenta'}</p></div><div class="actions"><select id="range" aria-label="Período"><option value="7">7 días</option><option value="30">30 días</option><option value="90">90 días</option><option value="0">Todo</option></select><button id="signout" class="btn secondary">Salir</button></div></header><div id="db-warning"></div><div id="content"></div><footer class="foot">Mi Ruta PRO · GFLM Systems · Tu control, tu ganancia</footer></main></div>`;$('#range').value=range;$('#range').onchange=e=>{range=e.target.value;render()};$('#signout').onclick=async()=>{if(demo){demo=false;user=null;db={profiles:[],vehicles:[],shifts:[],movements:[],fuel:[],goals:[],maintenance:[],debts:[],debt_actions:[]}}else{await sb.rpc('touch_customer_presence',{p_page:page,p_active:false});await sb.auth.signOut()}user=null;lastOpenedUser=null;await refresh()};document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>visitPage(b.dataset.page))}
 const field=(label,name,type='text',extra='')=>`<div><label>${label}</label><input name="${name}" type="${type}" ${extra}/></div>`;
 const sel=(label,name,arr)=>`<div><label>${label}</label><select name="${name}">${arr.map(a=>`<option>${esc(a)}</option>`).join('')}</select></div>`;
 const form=(id,body,button='Guardar')=>`<form id="${id}" class="fields">${body}<div class="wide"><button class="btn" type="submit">${button}</button></div><p class="help wide" id="status"></p></form>`;
@@ -343,7 +430,7 @@ function adminView(){
  const cards=[['Cuentas',totals.users],['Pendientes',totals.pending],['Activas',totals.active],['Vencidas',totals.expired],['Suspendidas',totals.suspended]];
  const opts=(choices,selected)=>choices.map(([v,t])=>`<option value="${esc(v)}" ${v===selected?'selected':''}>${esc(t)}</option>`).join('');
  const list=customerList.map(x=>`<form class="customer-line" data-account="${esc(x.user_id)}">
-  <div class="customer-identity"><strong>${esc(x.email)}</strong><small>Solicitada: ${esc(dateStr(x.created_at))}</small><span class="account-status">${esc(label(x))}</span></div>
+  <div class="customer-identity"><strong>${esc(x.email)}</strong><small>Creada: ${esc(dateStr(x.created_at))}</small><span data-live-user="${esc(x.user_id)}" class="live-dot ${isOnline(x.user_id)?'online':'offline'}">${isOnline(x.user_id)?'● En línea':'○ Desconectado'}</span><small data-last-seen-user="${esc(x.user_id)}">${esc(presenceFor(x.user_id)?.last_seen?'Última actividad: '+fmtLastUse(presenceFor(x.user_id).last_seen):'Sin actividad todavía')}</small><span class="account-status">${esc(label(x))}</span></div>
   <div class="customer-controls">
    <div><label>Estado</label><select name="status">${opts([['pending','Pendiente'],['active','Activo'],['suspended','Suspendido']],x.status)}</select></div>
    <div><label>Plan</label><select name="plan">${opts([['Mensual','Mensual'],['Trimestral','Trimestral'],['Anual','Anual'],['Cortesía','Cortesía']],x.plan)}</select></div>
@@ -351,9 +438,11 @@ function adminView(){
    <button type="submit" class="btn">Guardar</button>
   </div>
   <div class="customer-quick"><button type="button" class="btn secondary small" data-duration="7">+7 días</button><button type="button" class="btn secondary small" data-duration="30">+30 días</button><button type="button" class="btn secondary small" data-duration="90">+90 días</button><button type="button" class="btn secondary small" data-password-reset="${esc(x.user_id)}">Restablecer clave</button><span class="help customer-feedback" role="status"></span></div>
+ ${usageClientPanel(x)}
  </form>`).join('');
  return `<section class="panel welcome admin-hero"><div><p class="eyebrow">MI RUTA PRO · PROPIETARIO</p><h2>Control de clientes y suscripciones</h2><p>Aprueba solicitudes, define vencimientos y suspende accesos. Los datos financieros de cada conductor siguen privados.</p></div><button class="btn secondary" id="admin-reload" type="button">Actualizar</button></section>
  <div class="cards admin-stats">${cards.map(([k,v])=>`<div class="card"><small>${k}</small><strong>${v}</strong></div>`).join('')}</div>
+ ${usageOverview()}
  <section class="panel create-client-panel">
  <h2>➕ Crear cuenta para un cliente</h2>
  <p class="help">Tú creas la cuenta y entregas las credenciales. Se genera una contraseña temporal segura.</p>
@@ -369,6 +458,9 @@ function adminView(){
  <section class="panel"><h2>Privacidad</h2><p class="help">Este panel muestra correos, planes y accesos; no permite consultar kilómetros, ganancias, gastos, préstamos ni grifos ajenos.</p></section>`;
 }
 function wireAdmin(){
+ const period=$('#usage-period');if(period)period.onchange=e=>{usagePeriod=e.target.value;render()};
+ if($('#refresh-usage'))$('#refresh-usage').onclick=refresh;
+ if($('#export-usage'))$('#export-usage').onclick=exportUsage;
  addAdminCreateActions();
  const reload=$('#admin-reload');if(reload)reload.onclick=refresh;
  document.querySelectorAll('.customer-line').forEach(form=>{
@@ -441,7 +533,7 @@ function render(){
  content.innerHTML=({inicio:dashboard,cierre:quickClose,jornadas:journeys,movimientos:movements,combustible:fuel,
  analisis:()=>`<section class="panel"><div class="charttitle"><h2>Ganancia neta por día · solo cierres diarios</h2><span class="tag">Mis jornadas</span></div>${weekdayAnalysis()}</section>`,
  metas:goals,pagos:paymentPlan,mantenimiento:maint,configuracion:config})[page]();
- document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{page=b.dataset.go;render()});
+ document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>visitPage(b.dataset.go));
  wireDeletes();wireQuick();wireMovementCategory();wireDebtActions();
  const forms={quickform:saveQuick,shiftform:saveShift,moveform:saveMove,fuelform:saveFuel,goalform:saveGoal,debtform:saveDebt,maintform:saveMaint,carform:saveCar};
  Object.entries(forms).forEach(([id,fn])=>{const el=$('#'+id);if(el)el.onsubmit=async e=>{
