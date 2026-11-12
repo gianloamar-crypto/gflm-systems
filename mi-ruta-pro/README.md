@@ -110,3 +110,12 @@ El propietario mantiene la creación y control de cuentas: correo, plan, contras
 - Los reportes los entrega una función PostgreSQL protegida por rol de propietario, con **solo agregados** y nunca movimientos particulares. Se quitó de la interfaz la presencia, los minutos de pantalla y la analítica de sesiones; se deshabilitó su recogida futura. El historial anterior no se elimina.
 - Migraciones: `migration_v12_owner_period_summary.sql` y `migration_v13_stop_usage_tracking.sql`. Se añadieron también a `schema.sql`.
 - Las contraseñas no se guardan en `customer_accounts` ni en GitHub. La clave temporal se muestra una única vez en la interfaz tras crear/restablecer una cuenta; se entrega por canal privado. El propietario no conoce la contraseña personal posterior.
+
+## V14 — Endurecimiento de seguridad
+
+- El servidor bloquea los registros de usuarios con contraseña temporal pendiente de cambiar, aunque intenten saltarse la interfaz. El propietario conserva su acceso.
+- Vercel implementa CSP, anti-iframe, no-referrer, HSTS, no-sniff, permissions-policy, noindex y políticas de caché para distribuir correcciones.
+- Deshabilitados listados de archivos, exposición de sourcemaps, vistas previas y acceso de soporte al código en la configuración del proyecto (verificar las opciones permitidas por el plan).
+- Repositorio GitHub actual **público** y compartido con otros proyectos; no puede ocultarse desde un cliente web ni desde los permisos de este conector. Requiere administrar la visibilidad o migrar Mi Ruta PRO a repositorio privado.
+- Pendiente en Supabase Dashboard: desactivar registro público, activar protección de contraseñas filtradas, limitar intentos de Auth y habilitar MFA del propietario.
+- No afirmar que una web sea totalmente anticopiable o inhackeable.
