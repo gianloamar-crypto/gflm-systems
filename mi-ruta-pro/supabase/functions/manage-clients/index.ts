@@ -32,9 +32,13 @@ function validDate(s: unknown): s is string {
   return typeof s === "string" && /^\d{4}-\d\d-\d\d$/.test(s) &&
    !Number.isNaN(Date.parse(s+"T00:00:00Z"));
 }
-const todayPeru = () => new Intl.DateTimeFormat("en-CA", {
- timeZone:"America/Lima",year:"numeric",month:"2-digit",day:"2-digit"
-}).format(new Date());
+const todayPeru = () => {
+ const parts = new Intl.DateTimeFormat("en-US", {
+  timeZone:"America/Lima",year:"numeric",month:"2-digit",day:"2-digit"
+ }).formatToParts(new Date());
+ const lookup = (name: string) => parts.find(p => p.type === name)?.value || "";
+ return lookup("year")+"-"+lookup("month")+"-"+lookup("day");
+};
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
