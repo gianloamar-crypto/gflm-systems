@@ -2,7 +2,7 @@ import {SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY} from './config.js';
 import {weekdayReport, fuelCycles, stationRanking, fuelAmountForDisplay, fuelAmountToStore, fuelVolumeUnit} from './analytics.mjs';
 import {debtStatus, validateDebtAction} from './debts.mjs';
 const ready=Boolean(SUPABASE_URL&&SUPABASE_PUBLISHABLE_KEY);const currency=n=>'S/ '+Number(n||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2});const fmt=n=>Number(n||0).toLocaleString('es-PE',{maximumFractionDigits:2});const today=()=>new Date().toLocaleDateString('en-CA',{timeZone:'America/Lima'});const $=s=>document.querySelector(s);const root=$('#root');
-let sb=null,user=null,demo=false,signupMode=false,isAdmin=false,myLicense=null,customerList=[],presenceRows=[],usageEvents=[],usageDaily=[],usagePeriod='30',usageSampleLimited=false,activityTimer=null,lastOpenedUser=null,db={profiles:[],vehicles:[],shifts:[],movements:[],fuel:[],goals:[],maintenance:[],debts:[],debt_actions:[]},page='inicio',range='30';
+let sb=null,user=null,demo=false,signupMode=false,isAdmin=false,myLicense=null,customerList=[],presenceRows=[],usageEvents=[],usageDaily=[],usagePeriod='30',usageSampleLimited=false,activityTimer=null,lastOpenedUser=null,ownerFinancialRows=[],ownerReportGrain='week',ownerReportError='',db={profiles:[],vehicles:[],shifts:[],movements:[],fuel:[],goals:[],maintenance:[],debts:[],debt_actions:[]},page='inicio',range='30';
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const toNum=v=>Math.round((Number(v)||0)*100)/100;
 const dateStr=s=>String(s||'').slice(0,10);
@@ -11,7 +11,7 @@ function account(){return db.profiles[0]?.display_name||user?.email||'Usuario'}
 function accountEnabled(a){return a?.status==='active'&&String(a.expires_at||'')>=today()}
 function accountState(a){if(!a||a.status==='pending')return 'Pendiente';if(a.status==='suspended')return 'Suspendida';if(a.status==='active'&&!accountEnabled(a))return 'Vencida';return 'Activa'}
 function freshDb(){return {profiles:[],vehicles:[],shifts:[],movements:[],fuel:[],goals:[],maintenance:[],debts:[],debt_actions:[]}}
-async function init(){if(ready){try{const {createClient}=await import('https://esm.sh/@supabase/supabase-js@2.57.4');sb=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true}});const {data}=await sb.auth.getUser();user=data.user;sb.auth.onAuthStateChange((_evt,session)=>{const id=session?.user?.id;if(id!==user?.id){user=session?.user||null;setTimeout(()=>refresh(),0)}})}catch(e){root.innerHTML='<div class="auth">No se pudo iniciar la conexión: '+esc(e.message)+'</div>';return}}installActivityTracking();await refresh()}
+async function init(){if(ready){try{const {createClient}=await import('https://esm.sh/@supabase/supabase-js@2.57.4');sb=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true}});const {data}=await sb.auth.getUser();user=data.user;sb.auth.onAuthStateChange((_evt,session)=>{const id=session?.user?.id;if(id!==user?.id){user=session?.user||null;setTimeout(()=>refresh(),0)}})}catch(e){root.innerHTML='<div class="auth">No se pudo iniciar la conexión: '+esc(e.message)+'</div>';return}}await refresh()}
 let dataError='';
 async function refresh(){
  if(user&&sb&&!demo){
@@ -28,17 +28,7 @@ async function refresh(){
     if(listing.error){console.error(listing.error.message);dataError='No se pudo consultar clientes.';customerList=[]}
     else customerList=(listing.data||[]).filter(a=>a.user_id!==user.id);
   }else customerList=[];
-  if(isAdmin){
-   const since=new Date(Date.now()-90*86400000).toISOString();
-   const [p,e,m]=await Promise.all([
-    sb.from('customer_presence').select('user_id,last_seen,active,page'),
-    sb.from('customer_activity').select('user_id,event,page,happened_at').gte('happened_at',since).order('happened_at',{ascending:false}).limit(10000),
-    sb.from('customer_usage_daily').select('user_id,day,active_seconds').gte('day',since.slice(0,10)).limit(15000)
-   ]);
-   presenceRows=p.data||[];usageEvents=e.data||[];usageDaily=m.data||[];
-   usageSampleLimited=usageEvents.length>=10000||usageDaily.length>=15000;
-   if(p.error||e.error||m.error){dataError='Error al cargar el reporte de actividad.';console.warn(p.error?.message,e.error?.message,m.error?.message)}
-  }else{presenceRows=[];usageEvents=[];usageDaily=[];usageSampleLimited=false}
+  if(isAdmin){await fetchOwnerReport()}else{ownerFinancialRows=[];ownerReportError=''}
   if(isAdmin||accountEnabled(myLicense)){
     const tables=Object.keys(db);
     const results=await Promise.all(tables.map(t=>sb.from(t).select('*').eq('user_id',user.id).order('created_at',{ascending:false})));
@@ -46,7 +36,7 @@ async function refresh(){
   }else {db=freshDb();if(isAdmin)page='administracion';}
   if(isAdmin&&page==='inicio'&&!db.vehicles.length)page='administracion';
  }else{isAdmin=false;myLicense=null;customerList=[];presenceRows=[];usageEvents=[];usageDaily=[];db=freshDb();}
- registerOpenForCurrentUser();
+ if(!isAdmin&&page==='administracion')page='inicio';
  render();
 }
 function fmtLastUse(value){if(!value)return "Sin actividad";const d=new Date(value);return Number.isFinite(d.getTime())?new Intl.DateTimeFormat("es-PE",{timeZone:"America/Lima",day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}).format(d):"No disponible"}
@@ -118,11 +108,76 @@ function registerOpenForCurrentUser(){
  if(lastOpenedUser!==user.id){lastOpenedUser=user.id;recordUsageEvent("apertura");if(!isAdmin&&page!=="administracion")recordUsageEvent("pagina",page)}
  if(!document.hidden)touchPresence(true);
 }
-function visitPage(next){
- if(!next||!user)return;const changed=next!==page;page=next;
- if(changed&&next!=="administracion"&&!isAdmin)recordUsageEvent("pagina",next);
- if(!document.hidden)touchPresence(true);
- render();
+function visitPage(next){if(!next||!user)return;page=next;render()}
+function ownerReportPeriods(){return ownerReportGrain==='day'?14:ownerReportGrain==='week'?8:6}
+async function fetchOwnerReport(){
+ if(!sb||!isAdmin){ownerFinancialRows=[];ownerReportError='';return}
+ const {data,error}=await sb.rpc('owner_period_summary',{p_grain:ownerReportGrain,p_periods:ownerReportPeriods()});
+ if(error){ownerReportError='No se pudo cargar el reporte: '+error.message;ownerFinancialRows=[];console.warn(error.message)}
+ else {ownerReportError='';ownerFinancialRows=data||[]}
+}
+function hasReportData(r){return !!r&&(Number(r.worked_days)>0||Number(r.income)>0||Number(r.operating_cost)>0||Number(r.fuel_cost)>0)}
+function reportPeriodLabel(day){
+ const date=new Date(String(day)+'T12:00:00Z');if(Number.isNaN(date.getTime()))return String(day||'');
+ const p=new Intl.DateTimeFormat('es-PE',{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'});
+ if(ownerReportGrain==='day')return p.format(date);
+ if(ownerReportGrain==='month')return new Intl.DateTimeFormat('es-PE',{month:'long',year:'numeric',timeZone:'UTC'}).format(date);
+ const e=new Date(date);e.setUTCDate(e.getUTCDate()+6);
+ return p.format(date)+' – '+p.format(e);
+}
+function clientReport(id){return ownerFinancialRows.filter(r=>r.user_id===id).sort((a,b)=>String(b.period_start).localeCompare(String(a.period_start)))}
+function ownerFinancialClientPanel(client){
+ const rows=clientReport(client.user_id),current=rows[0],active=hasReportData(current);
+ const val=(v,unit='money')=>unit==='km'?fmt(v)+' km':unit==='gal'?fmt(v)+' gal':currency(v);
+ const cards=[['Ingresos',active?val(current.income):'Sin registros'],
+              ['Ganancia operativa',active?val(current.net_profit):'Sin registros'],
+              ['Km recorridos',active?val(current.km_total,'km'):'Sin registros'],
+              ['GLP pagado',active?val(current.glp_cost):'Sin registros']];
+ return `<details class="owner-report-client">
+  <summary>📊 Reporte de ${ownerReportGrain==='day'?'día':ownerReportGrain==='week'?'semana':'mes'} · ${esc(rows.length?reportPeriodLabel(rows[0].period_start):'Sin registros')}</summary>
+  <div class="client-metrics">${cards.map(([label,value])=>`<div class="client-metric"><small>${esc(label)}</small><strong>${esc(value)}</strong></div>`).join('')}</div>
+  <div class="finance-glp-details">
+    <span><b>Km de trabajo:</b> ${active?fmt(current.km_work)+' km':'Sin registros'}</span>
+    <span><b>GLP cargado:</b> ${active?fmt(current.glp_gallons)+' gal':'Sin registros'}</span>
+    <span><b>Rendimiento GLP:</b> ${current?.valid_glp_cycles>0?fmt(current.glp_km_per_gallon)+' km/gal':'Sin ciclos válidos'}</span>
+  </div>
+  <h3>Historial ${ownerReportGrain==='day'?'diario':ownerReportGrain==='week'?'semanal':'mensual'}</h3>
+  <div class="scroll"><table><thead><tr><th>Período</th><th>Ingresos</th><th>Ganancia</th><th>Km totales</th><th>Km trabajo</th><th>GLP S/</th><th>GLP gal</th><th>Km/gal</th></tr></thead>
+  <tbody>${rows.map(r=>hasReportData(r)?`<tr><td>${esc(reportPeriodLabel(r.period_start))}</td><td>${currency(r.income)}</td><td>${currency(r.net_profit)}</td><td>${fmt(r.km_total)}</td><td>${fmt(r.km_work)}</td><td>${currency(r.glp_cost)}</td><td>${fmt(r.glp_gallons)}</td><td>${r.valid_glp_cycles>0?fmt(r.glp_km_per_gallon):'—'}</td></tr>`:`<tr><td>${esc(reportPeriodLabel(r.period_start))}</td><td colspan="7" class="help">Sin registros</td></tr>`).join('')||'<tr><td colspan="8">Sin registros</td></tr>'}</tbody></table></div>
+  <p class="help">Ganancia = ingresos menos gastos operativos y recargas de combustible registradas (sin gastos personales ni préstamos). GLP S/ refleja pagos en grifo, no consumo exacto. Los km/gal requieren ciclos válidos entre llenados completos.</p>
+ </details>`;
+}
+function ownerFinanceOverview(){
+ const periods=Array.from(new Set(ownerFinancialRows.map(x=>String(x.period_start)))).sort().reverse(),latest=periods[0];
+ const current=ownerFinancialRows.filter(x=>String(x.period_start)===latest);
+ const withRecords=current.filter(hasReportData);
+ const sum=key=>withRecords.reduce((v,x)=>v+Number(x[key]||0),0);
+ const kpis=[['Ingresos',withRecords.length?currency(sum('income')):'Sin registros'],
+  ['Ganancia operativa',withRecords.length?currency(sum('net_profit')):'Sin registros'],
+  ['Km recorridos',withRecords.length?fmt(sum('km_total'))+' km':'Sin registros'],
+  ['GLP pagado',withRecords.length?currency(sum('glp_cost')):'Sin registros']];
+ return `<section class="panel owner-finance-overview"><div class="charttitle">
+ <div><h2>Ganancias, kilometraje y GLP</h2><p class="help">Reportes agregados de tus clientes. Elige el período para revisar todos los conductores.</p></div>
+ <div class="actions"><select id="owner-report-grain" aria-label="Agrupación del reporte">
+ <option value="day" ${ownerReportGrain==='day'?'selected':''}>Diario</option>
+ <option value="week" ${ownerReportGrain==='week'?'selected':''}>Semanal</option>
+ <option value="month" ${ownerReportGrain==='month'?'selected':''}>Mensual</option>
+ </select><button id="owner-report-refresh" type="button" class="btn secondary">Actualizar</button>
+ <button id="owner-report-export" type="button" class="btn secondary">Exportar CSV</button></div></div>
+ <p class="help">Período actual: <b>${esc(latest?reportPeriodLabel(latest):'Sin registros')}</b> · ${withRecords.length} cliente(s) con movimientos.</p>
+ <div class="cards owner-finance-kpis">${kpis.map(([k,v])=>`<div class="card"><small>${esc(k)}</small><strong>${esc(v)}</strong></div>`).join('')}</div>
+ ${ownerReportError?`<p class="notice">${esc(ownerReportError)}</p>`:''}
+ </section>`;
+}
+function exportOwnerFinance(){
+ const headers=['Cliente','Período','Inicio','Ingresos S/','Otros costos S/','Combustible total S/','GLP S/','Ganancia operativa S/','Km totales','Km trabajo','GLP gal','Km/gal GLP','Jornadas'];
+ const rows=ownerFinancialRows.map(r=>[customerList.find(c=>c.user_id===r.user_id)?.email||'',ownerReportGrain,r.period_start,
+  r.income,r.operating_cost,r.fuel_cost,r.glp_cost,r.net_profit,r.km_total,r.km_work,r.glp_gallons,
+  r.valid_glp_cycles>0?r.glp_km_per_gallon:'Sin datos',r.worked_days]);
+ const csv=[headers,...rows].map(x=>x.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
+ const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}),link=document.createElement('a');
+ link.href=URL.createObjectURL(blob);link.download='Mi_Ruta_PRO_reporte_'+ownerReportGrain+'.csv';link.click();
+ setTimeout(()=>URL.revokeObjectURL(link.href),1000);
 }
 function loginView(){
  root.innerHTML=`<main class="auth auth-refresh">
@@ -150,7 +205,7 @@ function loginView(){
  };
 }
 const pages=[['inicio','▦','Inicio'],['cierre','✓','Cierre rápido'],['jornadas','🚘','Jornadas'],['movimientos','💳','Movimientos'],['combustible','⛽','Combustible'],['analisis','📊','Análisis de días'],['metas','🎯','Metas'],['pagos','💰','Préstamos y pagos'],['mantenimiento','🔧','Mantenimiento'],['configuracion','⚙️','Mi vehículo']];
-function shell(){root.innerHTML=`<div class="layout"><aside class="sidebar"><div class="brand">🚘 Mi Ruta <b>PRO</b></div>${(isAdmin?[...pages,['administracion','👑','Mis clientes']]:pages).map(([p,ico,label])=>`<button data-page="${p}" class="menu ${page===p?'active':''}">${ico} ${label}</button>`).join('')}</aside><main class="main"><header class="top"><div><h1 id="heading">${esc(pages.find(x=>x[0]===page)?.[2]||(page==='administracion'?'Mis clientes':'Inicio'))}</h1><p class="muted">${demo?'🧪 Modo demostración · Datos ficticios, no se guardan':'🔒 '+esc(account())+' · Datos privados de tu cuenta'}</p></div><div class="actions"><select id="range" aria-label="Período"><option value="7">7 días</option><option value="30">30 días</option><option value="90">90 días</option><option value="0">Todo</option></select><button id="signout" class="btn secondary">Salir</button></div></header><div id="db-warning"></div><div id="content"></div><footer class="foot">Mi Ruta PRO · GFLM Systems · Tu control, tu ganancia</footer></main></div>`;$('#range').value=range;$('#range').onchange=e=>{range=e.target.value;render()};$('#signout').onclick=async()=>{if(demo){demo=false;user=null;db={profiles:[],vehicles:[],shifts:[],movements:[],fuel:[],goals:[],maintenance:[],debts:[],debt_actions:[]}}else{await sb.rpc('touch_customer_presence',{p_page:page,p_active:false});await sb.auth.signOut()}user=null;lastOpenedUser=null;await refresh()};document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>visitPage(b.dataset.page))}
+function shell(){root.innerHTML=`<div class="layout"><aside class="sidebar"><div class="brand">🚘 Mi Ruta <b>PRO</b></div>${(isAdmin?[...pages,['administracion','👑','Mis clientes']]:pages).map(([p,ico,label])=>`<button data-page="${p}" class="menu ${page===p?'active':''}">${ico} ${label}</button>`).join('')}</aside><main class="main"><header class="top"><div><h1 id="heading">${esc(pages.find(x=>x[0]===page)?.[2]||(page==='administracion'?'Mis clientes':'Inicio'))}</h1><p class="muted">${demo?'🧪 Modo demostración · Datos ficticios, no se guardan':'🔒 '+esc(account())+' · Datos privados de tu cuenta'}</p></div><div class="actions"><select id="range" aria-label="Período"><option value="7">7 días</option><option value="30">30 días</option><option value="90">90 días</option><option value="0">Todo</option></select><button id="signout" class="btn secondary">Salir</button></div></header><div id="db-warning"></div><div id="content"></div><footer class="foot">Mi Ruta PRO · GFLM Systems · Tu control, tu ganancia</footer></main></div>`;$('#range').value=range;$('#range').onchange=e=>{range=e.target.value;render()};$('#signout').onclick=async()=>{if(demo){demo=false;user=null;db={profiles:[],vehicles:[],shifts:[],movements:[],fuel:[],goals:[],maintenance:[],debts:[],debt_actions:[]}}else{await sb.auth.signOut()}user=null;lastOpenedUser=null;await refresh()};document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>visitPage(b.dataset.page))}
 const field=(label,name,type='text',extra='')=>`<div><label>${label}</label><input name="${name}" type="${type}" ${extra}/></div>`;
 const sel=(label,name,arr)=>`<div><label>${label}</label><select name="${name}">${arr.map(a=>`<option>${esc(a)}</option>`).join('')}</select></div>`;
 const form=(id,body,button='Guardar')=>`<form id="${id}" class="fields">${body}<div class="wide"><button class="btn" type="submit">${button}</button></div><p class="help wide" id="status"></p></form>`;
@@ -430,7 +485,7 @@ function adminView(){
  const cards=[['Cuentas',totals.users],['Pendientes',totals.pending],['Activas',totals.active],['Vencidas',totals.expired],['Suspendidas',totals.suspended]];
  const opts=(choices,selected)=>choices.map(([v,t])=>`<option value="${esc(v)}" ${v===selected?'selected':''}>${esc(t)}</option>`).join('');
  const list=customerList.map(x=>`<form class="customer-line" data-account="${esc(x.user_id)}">
-  <div class="customer-identity"><strong>${esc(x.email)}</strong><small>Creada: ${esc(dateStr(x.created_at))}</small><span data-live-user="${esc(x.user_id)}" class="live-dot ${isOnline(x.user_id)?'online':'offline'}">${isOnline(x.user_id)?'● En línea':'○ Desconectado'}</span><small data-last-seen-user="${esc(x.user_id)}">${esc(presenceFor(x.user_id)?.last_seen?'Última actividad: '+fmtLastUse(presenceFor(x.user_id).last_seen):'Sin actividad todavía')}</small><span class="account-status">${esc(label(x))}</span></div>
+  <div class="customer-identity"><strong>${esc(x.email)}</strong><small>Creada: ${esc(dateStr(x.created_at))}</small><span class="account-status">${esc(label(x))}</span></div>
   <div class="customer-controls">
    <div><label>Estado</label><select name="status">${opts([['pending','Pendiente'],['active','Activo'],['suspended','Suspendido']],x.status)}</select></div>
    <div><label>Plan</label><select name="plan">${opts([['Mensual','Mensual'],['Trimestral','Trimestral'],['Anual','Anual'],['Cortesía','Cortesía']],x.plan)}</select></div>
@@ -438,11 +493,11 @@ function adminView(){
    <button type="submit" class="btn">Guardar</button>
   </div>
   <div class="customer-quick"><button type="button" class="btn secondary small" data-duration="7">+7 días</button><button type="button" class="btn secondary small" data-duration="30">+30 días</button><button type="button" class="btn secondary small" data-duration="90">+90 días</button><button type="button" class="btn secondary small" data-password-reset="${esc(x.user_id)}">Restablecer clave</button><span class="help customer-feedback" role="status"></span></div>
- ${usageClientPanel(x)}
+ ${ownerFinancialClientPanel(x)}
  </form>`).join('');
- return `<section class="panel welcome admin-hero"><div><p class="eyebrow">MI RUTA PRO · PROPIETARIO</p><h2>Control de clientes y suscripciones</h2><p>Aprueba solicitudes, define vencimientos y suspende accesos. Los datos financieros de cada conductor siguen privados.</p></div><button class="btn secondary" id="admin-reload" type="button">Actualizar</button></section>
+ return `<section class="panel welcome admin-hero"><div><p class="eyebrow">MI RUTA PRO · PROPIETARIO</p><h2>Control de clientes y suscripciones</h2><p>Aprueba solicitudes, define vencimientos y suspende accesos. Solo recibes totales por día, semana y mes. No se muestran viajes ni movimientos individuales.</p></div><button class="btn secondary" id="admin-reload" type="button">Actualizar</button></section>
  <div class="cards admin-stats">${cards.map(([k,v])=>`<div class="card"><small>${k}</small><strong>${v}</strong></div>`).join('')}</div>
- ${usageOverview()}
+ ${ownerFinanceOverview()}
  <section class="panel create-client-panel">
  <h2>➕ Crear cuenta para un cliente</h2>
  <p class="help">Tú creas la cuenta y entregas las credenciales. Se genera una contraseña temporal segura.</p>
@@ -455,12 +510,12 @@ function adminView(){
  </form><div id="issued-account" class="credentials-once hidden" aria-live="polite"></div>
  </section>
  <section class="panel"><div class="charttitle"><div><h2>Clientes registrados</h2><p class="help">Solo tú creas las cuentas, entregas las credenciales y decides quién puede entrar.</p></div><span class="tag">${totals.users} cuenta(s)</span></div>${list||'<div class="empty">Todavía no hay clientes. Los clientes que crees aparecerán aquí.</div>'}</section>
- <section class="panel"><h2>Privacidad</h2><p class="help">Este panel muestra correos, planes y accesos; no permite consultar kilómetros, ganancias, gastos, préstamos ni grifos ajenos.</p></section>`;
+ <section class="panel"><h2>Privacidad</h2><p class="help">Este panel muestra totales de ingresos, ganancia operativa, kilómetros y GLP de tus clientes. No revela notas, rutas, gastos personales ni préstamos.</p></section>`;
 }
 function wireAdmin(){
- const period=$('#usage-period');if(period)period.onchange=e=>{usagePeriod=e.target.value;render()};
- if($('#refresh-usage'))$('#refresh-usage').onclick=refresh;
- if($('#export-usage'))$('#export-usage').onclick=exportUsage;
+ const report=$('#owner-report-grain');if(report)report.onchange=async e=>{ownerReportGrain=e.target.value;await fetchOwnerReport();render()};
+ if($('#owner-report-refresh'))$('#owner-report-refresh').onclick=refresh;
+ if($('#owner-report-export'))$('#owner-report-export').onclick=exportOwnerFinance;
  addAdminCreateActions();
  const reload=$('#admin-reload');if(reload)reload.onclick=refresh;
  document.querySelectorAll('.customer-line').forEach(form=>{
