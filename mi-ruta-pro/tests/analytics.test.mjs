@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { weekdayReport, fuelCycles, stationRanking } from '../analytics.mjs';
+import { weekdayReport, fuelCycles, stationRanking, LITERS_PER_GALLON, fuelAmountToStore, fuelAmountForDisplay } from '../analytics.mjs';
 const shift = (date, km_work = 50) => ({ date, km_work, km_total: 60 });
 const m = (date, kind, amount) => ({ date, kind, amount });
 const f = (date, odometer, station, quantity, full_tank = true, exclusive_usage = true) => ({ date, odometer, station, quantity, amount: quantity * 2, fuel_type: 'GLP', full_tank, exclusive_usage });
@@ -24,15 +24,16 @@ test('un llenado completo a otro usa volumen al final del ciclo y atribuye al gr
   const a = fuelCycles(fills);
   assert.equal(a[0].station, 'Grifo Norte');
   assert.equal(a[0].distance, 100);
-  assert.equal(a[0].quantity, 10);
-  assert.equal(a[0].kmPerUnit, 10);
+  assert.ok(Math.abs(a[0].quantity-10/LITERS_PER_GALLON)<1e-7);
+  assert.ok(Math.abs(a[0].kmPerUnit-10*LITERS_PER_GALLON)<1e-7);
+  assert.equal(a[0].unit,'gal');
   assert.equal(a[0].usable, true);
 });
 
 test('recarga parcial cuenta para el denominador, ciclo mezclado no califica para ranking', () => {
   const fills = [f('2026-11-01', 1000, 'Grifo Norte', 10), f('2026-11-02', 1050, 'Grifo Sur', 4, false), f('2026-11-03', 1100, 'Grifo Norte', 6)];
   const a = fuelCycles(fills);
-  assert.equal(a[0].quantity, 10);
+  assert.ok(Math.abs(a[0].quantity-10/LITERS_PER_GALLON)<1e-7);
   assert.equal(a[0].usable, false);
   assert.equal(stationRanking(fills).length, 0);
 });
@@ -48,5 +49,17 @@ test('ranking requiere tres ciclos válidos para recomendación firme', () => {
   assert.equal(ranking.length, 1);
   assert.equal(ranking[0].cycles, 4);
   assert.equal(ranking[0].sufficient, true);
-  assert.equal(ranking[0].kmPerUnit, 10);
+  assert.ok(Math.abs(ranking[0].kmPerUnit-10*LITERS_PER_GALLON)<1e-7);
+});
+
+test('galones elegidos por usuario se almacenan como litros y se visualizan igual sin perder historial', () => {
+ const gal=8.5,stored=fuelAmountToStore(gal,'GLP');
+ assert.ok(Math.abs(stored-gal*3.785411784)<1e-8);
+ assert.ok(Math.abs(fuelAmountForDisplay(stored,'GLP')-gal)<1e-8);
+ assert.equal(fuelAmountToStore(12,'GNV'),12);
+});
+test('no se compara un ciclo GLP si se cargó gasolina a mitad del tramo',()=>{
+ const fills=[f('2026-11-01',1000,'Grifo A',10),f('2026-11-02',1100,'Grifo A',10),
+  {...f('2026-11-01',1050,'Gasolina',1),fuel_type:'Gasolina'}];
+ assert.equal(fuelCycles(fills)[0].usable,false);
 });

@@ -1,5 +1,10 @@
 // Funciones puras: resultados por jornada completa, nunca por hora.
 const n = value => Number(value) || 0;
+// Compatibilidad: los registros históricos guardan L para GLP/gasolina y m³ para GNV.
+export const LITERS_PER_GALLON = 3.785411784;
+export const fuelAmountForDisplay = (value,type) => type === 'GNV' ? n(value) : n(value) / LITERS_PER_GALLON;
+export const fuelAmountToStore = (value,type) => type === 'GNV' ? n(value) : n(value) * LITERS_PER_GALLON;
+export const fuelVolumeUnit = type => type === 'GNV' ? 'm³' : 'gal';
 const date = value => String(value ?? '').slice(0, 10);
 const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 const weekdayIndex = day => (new Date(`${day}T12:00:00Z`).getUTCDay() + 6) % 7;
@@ -59,18 +64,19 @@ export function fuelCycles(fuel = [], fuelType = 'GLP') {
     }
     if (!fill.full_tank) { between.push(fill); continue; }
     const distance = n(fill.odometer) - n(first.odometer);
-    const amount = [fill, ...between].reduce((s, row) => s + n(row.quantity), 0);
+    const amount = fuelAmountForDisplay([fill, ...between].reduce((s, row) => s + n(row.quantity), 0), fuelType);
     const payment = [fill, ...between].reduce((s, row) => s + n(row.amount), 0);
     const originStation = safeStation(first.station);
     const stationUnique = !!originStation && between.every(row => sameStation(row.station, originStation));
     const exclusive = fill.exclusive_usage === true;
-    const usable = distance > 0 && amount > 0 && exclusive && stationUnique;
+    const alternateFuel = fuel.some(row => row.fuel_type !== fuelType && n(row.odometer)>n(first.odometer) && n(row.odometer)<=n(fill.odometer));
+    const usable = distance > 0 && amount > 0 && exclusive && stationUnique && !alternateFuel;
     result.push({ from: date(first.date), to: date(fill.date), fromOdometer: n(first.odometer), toOdometer: n(fill.odometer),
-      distance, quantity: amount, cost: payment, unit: fuelType === 'GNV' ? 'm³' : 'L',
+      distance, quantity: amount, cost: payment, unit: fuelVolumeUnit(fuelType),
       kmPerUnit: distance > 0 && amount > 0 ? distance / amount : null,
       solesPerKm: distance > 0 ? payment / distance : null,
       station: originStation, stationUnique, exclusive, usable,
-      reason: !exclusive ? 'No se confirmó uso exclusivo del combustible' : !stationUnique ? 'Grifo desconocido o mezclado en el ciclo' : distance <= 0 || amount <= 0 ? 'Lecturas o cantidades inválidas' : '' });
+      reason: !exclusive ? 'No se confirmó uso exclusivo del combustible' : !stationUnique ? 'Grifo desconocido o mezclado en el ciclo' : alternateFuel ? 'Se registró otro combustible durante el ciclo' : distance <= 0 || amount <= 0 ? 'Lecturas o cantidades inválidas' : '' });
     first = fill;
     between = [];
   }
