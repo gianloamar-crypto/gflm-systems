@@ -34,3 +34,14 @@ Migración gradual desde el archivo V4 de Mi Ruta PRO. La app conserva los módu
 Con Node.js 18+: `node --test tests/analytics.test.mjs`. Sin Node, la web se puede abrir con un servidor estático; `app.js` usa ES modules.
 
 **Estado:** versión de prueba. La URL desplegada puede mostrar una demostración sin cuenta. La autenticación real no está activada hasta disponer de un Supabase aislado y ejecutar SQL. No se han migrado historiales privados de V4.
+
+## V3: Préstamos y pagos (sin conexión a billetera)
+
+- Nueva pestaña **Préstamos y pagos**: nombre, tipo, importe y fecha límite; calcula cuánto apartar por día hasta la fecha indicada, en calendario local de Perú.
+- **Apartado**: una cantidad declarada como reservada. **Pago real**: un abono efectivamente efectuado al acreedor, que reduce la deuda. Si el pago utilizó dinero apartado, se rebaja de lo reservado sin contarlo dos veces. **Retirar de apartado**: libera una reserva.
+- La sección de cierre diario permite apartar un importe opcional para un compromiso. No exige movimientos durante el día ni depende de integraciones bancarias.
+- El saldo operativo no se altera al apartar; solo los pagos reales se incluyen en el flujo personal. No registrar el mismo pago como gasto personal adicional en Movimientos.
+- Se redujeron las categorías visibles para nuevos movimientos, sin alterar las etiquetas históricas.
+- Base de datos nueva: `schema.sql` (incluye V2 y V3). Base existente Mi Ruta PRO V2: ejecutar `migration_v3.sql` **solo allí**. Nunca aplicar en FHERDANI PRO.
+- Para despliegues con cuentas reales, ejecutar la migración antes de activar la nueva versión. Las pruebas de aislamiento RLS requieren dos cuentas reales de prueba y conexión a la base propia.
+- En demostración los registros son temporales. Un apartado declarado no demuestra que el dinero exista en una billetera o cuenta bancaria.
