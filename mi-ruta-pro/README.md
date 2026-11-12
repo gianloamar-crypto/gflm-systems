@@ -100,3 +100,13 @@ El propietario mantiene la creación y control de cuentas: correo, plan, contras
 - Las tablas `customer_presence`, `customer_activity` y `customer_usage_daily` tienen RLS y acceso solo a propietario; nadie tiene escritura directa desde el navegador (la web usa funciones con identidad verificada).
 - La trazabilidad inicia **desde esta actualización**; no se reconstruye artificialmente el historial anterior. Las métricas no son base de facturación automatizada.
 - Migraciones sobre Supabase exclusivo de Mi Ruta PRO: `migration_v8_activity_reports.sql` y `migration_v9_active_minutes.sql`.
+
+## V12/V13 — Operación comercial definitiva (Perú)
+
+- Tú creas las cuentas con correo y **contraseña temporal de tu elección** (8 a 72 caracteres, letras y números; sin exigir símbolos). El cliente cambia su contraseña al primer ingreso y después ve obligatoriamente la configuración inicial «¿Con cuánto comienzas tu ruta?»: nombre, vehículo, odómetro, efectivo y billetera inicial. No se contabilizan saldos iniciales como ingresos.
+- GLP y gasolina se **introducen y visualizan en galones estadounidenses (1 gal = 3.785411784 L)**; GNV permanece en m³. Para conservar datos históricos, Supabase guarda los volúmenes GLP/gasolina internamente en litros y la interfaz convierte tanto al guardar como al consultar.
+- «Mis clientes» del propietario presenta informes **diarios (14 días), semanales (8 semanas), mensuales (6 meses)**, totales y por conductor; ingresos, ganancia neta operativa, km total y de trabajo, GLP pagado en soles y galones, y km/gal cuando existe ciclo verificable. Exporta CSV.
+- Ganancia operativa = ingresos - otros costos laborales - combustible pagado (GLP y otros). No resta gastos personales ni préstamos. El GLP pagado no es sinónimo del GLP consumido. El km/gal solo se calcula con ciclos válidos entre tanques llenos, uso exclusivo verificado y sin cargas de otro combustible intermedias.
+- Los reportes los entrega una función PostgreSQL protegida por rol de propietario, con **solo agregados** y nunca movimientos particulares. Se quitó de la interfaz la presencia, los minutos de pantalla y la analítica de sesiones; se deshabilitó su recogida futura. El historial anterior no se elimina.
+- Migraciones: `migration_v12_owner_period_summary.sql` y `migration_v13_stop_usage_tracking.sql`. Se añadieron también a `schema.sql`.
+- Las contraseñas no se guardan en `customer_accounts` ni en GitHub. La clave temporal se muestra una única vez en la interfaz tras crear/restablecer una cuenta; se entrega por canal privado. El propietario no conoce la contraseña personal posterior.

@@ -218,4 +218,29 @@ tbody tr:hover{background:#FCF7F1}
  .client-usage>summary .help{font-size:11px}
 }
 
+
+/* Reporte exclusivo del propietario: ganancia y GLP en galones */
+.owner-finance-overview{background:#FFFCF8;border-color:#DFCBBB}
+.owner-finance-overview .charttitle{align-items:center;gap:12px;flex-wrap:wrap}
+.owner-finance-overview .charttitle .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.owner-finance-overview select{width:auto;min-width:130px}
+.owner-finance-kpis{grid-template-columns:repeat(4,minmax(0,1fr))}
+.owner-finance-kpis .card{background:#FAF3EA}
+.owner-finance-kpis .card strong{font-size:22px;overflow-wrap:anywhere}
+.owner-report-client{margin-top:14px;padding:16px;border-radius:13px;background:#FFFCF8;border:1px solid #E8D8C8}
+.owner-report-client>summary{color:#8B5039;font-weight:760;cursor:pointer;list-style-position:inside}
+.owner-report-client[open]>summary{padding-bottom:14px}
+.owner-report-client h3{margin:18px 0 9px;color:#514239;font-size:14px}
+.owner-report-client .client-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:0 0 10px}
+.owner-report-client .client-metric{background:#F7F0E8;border-radius:10px;padding:13px;min-width:0}
+.owner-report-client .client-metric small{display:block;color:#77695D;margin-bottom:7px;font-size:11px}
+.owner-report-client .client-metric strong{font-size:17px;color:#554135;overflow-wrap:anywhere}
+.finance-glp-details{display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:#65564A}
+.finance-glp-details span{background:#F2E8DC;padding:9px 11px;border-radius:10px}
+.owner-report-client .scroll{max-width:100%;overflow:auto}
+.owner-report-client table{min-width:790px;white-space:nowrap}
+.customer-reset-pass{max-width:230px;min-width:165px!important}
+@media(max-width:1000px){.owner-finance-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.owner-report-client .client-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:690px){.owner-finance-overview .charttitle .actions{width:100%}.owner-finance-overview select{flex:1}.owner-finance-kpis .card strong{font-size:18px}.customer-reset-pass{max-width:100%;width:100%}}
+
 </style></head><body><div id="root"></div><script type="module" src="app.js"></script></body></html>

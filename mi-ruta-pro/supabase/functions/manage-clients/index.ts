@@ -12,21 +12,12 @@ const headers = {
 const respond = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers });
 
-function tempPassword(): string {
-  const sets = ["ABCDEFGHJKLMNPQRSTUVWXYZ", "abcdefghjkmnpqrstuvwxyz", "23456789", "!@#%"];
-  const all = sets.join("");
-  const rand = (limit: number): number => {
-    const a = new Uint32Array(1);
-    const max = 0x100000000 - (0x100000000 % limit);
-    do { crypto.getRandomValues(a); } while (a[0] >= max);
-    return a[0] % limit;
-  };
-  const chars = sets.map(s => s[rand(s.length)]);
-  for (let i = 0; i < 16; i++) chars.push(all[rand(all.length)]);
-  for (let i = chars.length - 1; i > 0; i--) {
-    const j = rand(i + 1); [chars[i], chars[j]] = [chars[j], chars[i]];
-  }
-  return chars.join("");
+function validateTemporaryPassword(v: unknown): string | null {
+  if(typeof v!=="string" || v.length<8 || v.length>72) return "La clave debe tener entre 8 y 72 caracteres.";
+  if(!/[A-Za-z]/.test(v) || !/[0-9]/.test(v)) return "La clave debe incluir letras y números; no necesita símbolos especiales.";
+  if(/\s/.test(v)) return "La clave no debe contener espacios.";
+  if(["password123","password1","contrasena123","qwerty123","admin1234","ruta1234","12345678","123456789"].includes(v.toLowerCase())) return "Elige una clave temporal menos común.";
+  return null;
 }
 function validDate(s: unknown): s is string {
   return typeof s === "string" && /^\d{4}-\d\d-\d\d$/.test(s) &&
@@ -73,7 +64,9 @@ Deno.serve(async (req: Request) => {
        !["Mensual","Trimestral","Anual","Cortesía"].includes(plan) ||
        !validDate(expiry) || expiry < todayPeru())
        return respond({error:"Completa nombre, correo, plan y vencimiento futuro."},400);
-      const password = tempPassword();
+      const password = String(input.password||'');
+      const passwordIssue=validateTemporaryPassword(password);
+      if(passwordIssue) return respond({error:passwordIssue},400);
       const {data: created, error: createError} = await admin.auth.admin.createUser({
         email,password,email_confirm:true,
         user_metadata:{ display_name:name }
@@ -91,7 +84,7 @@ Deno.serve(async (req: Request) => {
         await admin.auth.admin.deleteUser(newId);
         return respond({error:"No se pudo habilitar la licencia. No se creó la cuenta."},500);
       }
-      return respond({ok:true,email,client_name:name,temporary_password:password,user_id:newId});
+      return respond({ok:true,email,client_name:name,user_id:newId});
     }
     if(action === "reset") {
       const targetId=String(input.user_id||"");
@@ -102,13 +95,15 @@ Deno.serve(async (req: Request) => {
         .select("user_id").eq("user_id",targetId).maybeSingle();
       if(findError || !existing?.user_id || otherAdmin?.user_id)
         return respond({error:"No se puede restablecer esa cuenta."},403);
-      const password=tempPassword();
+      const password=String(input.password||'');
+      const passwordIssue=validateTemporaryPassword(password);
+      if(passwordIssue) return respond({error:passwordIssue},400);
       const {error: resetError}=await admin.auth.admin.updateUserById(targetId,{password});
       if(resetError) return respond({error:"No se pudo cambiar el acceso."},500);
       const {error: flagError}=await admin.from("customer_accounts")
         .update({must_change_password:true,updated_at:new Date().toISOString()}).eq("user_id",targetId);
       if(flagError) return respond({error:"Clave modificada, pero no se pudo marcar el cambio obligatorio. Consulta soporte."},500);
-      return respond({ok:true,email:existing.email,temporary_password:password});
+      return respond({ok:true,email:existing.email});
     }
     return respond({error:"Acción no válida"},400);
   } catch(_e) {
