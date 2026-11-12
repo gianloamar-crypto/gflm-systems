@@ -1,1 +1,9 @@
-{"name":"Mi Ruta PRO","short_name":"Mi Ruta PRO","start_url":"/","display":"standalone","background_color":"#091610","theme_color":"#0d2018","description":"Control de kilómetros, combustible, ingresos, gastos y metas"}
+{
+  "name": "Mi Ruta PRO",
+  "short_name": "Mi Ruta PRO",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F8F5F0",
+  "theme_color": "#F3ECE3",
+  "description": "Control de kilómetros, combustible, ingresos, gastos y metas"
+}
