@@ -28,11 +28,12 @@ async function refresh(){
     if(listing.error){console.error(listing.error.message);dataError='No se pudo consultar clientes.';customerList=[]}
     else customerList=listing.data||[];
   }else customerList=[];
-  if(accountEnabled(myLicense)){
+  if(isAdmin||accountEnabled(myLicense)){
     const tables=Object.keys(db);
     const results=await Promise.all(tables.map(t=>sb.from(t).select('*').eq('user_id',user.id).order('created_at',{ascending:false})));
     results.forEach((r,i)=>{if(r.error){console.error(tables[i],r.error.message);db[tables[i]]=[];dataError='Algunos datos no se pudieron cargar.';}else db[tables[i]]=r.data||[]});
   }else {db=freshDb();if(isAdmin)page='administracion';}
+  if(isAdmin&&page==='inicio'&&!db.vehicles.length)page='administracion';
  }else{isAdmin=false;myLicense=null;customerList=[];db=freshDb();}
  render();
 }
@@ -379,7 +380,7 @@ function render(){
  if(isAdmin&&page==='administracion'){
   shell();$('#content').innerHTML=adminView();if(dataError)$('#db-warning').innerHTML='<div class="notice">'+esc(dataError)+'</div>';wireAdmin();return;
  }
- if(!accountEnabled(myLicense)){subscriptionView();return}
+ if(!isAdmin&&!accountEnabled(myLicense)){subscriptionView();return}
  if(!demo&&!db.vehicles.length){onboardingView();return}
  shell();
  if(dataError)$('#db-warning').innerHTML=`<div class="notice">${esc(dataError)}</div>`;
