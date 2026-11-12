@@ -2,16 +2,57 @@ import {SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY} from './config.js';
 import {weekdayReport, fuelCycles, stationRanking} from './analytics.mjs';
 import {debtStatus, validateDebtAction} from './debts.mjs';
 const ready=Boolean(SUPABASE_URL&&SUPABASE_PUBLISHABLE_KEY);const currency=n=>'S/ '+Number(n||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2});const fmt=n=>Number(n||0).toLocaleString('es-PE',{maximumFractionDigits:2});const today=()=>new Date().toLocaleDateString('en-CA',{timeZone:'America/Lima'});const $=s=>document.querySelector(s);const root=$('#root');
-let sb=null,user=null,demo=false,db={profiles:[],vehicles:[],shifts:[],movements:[],fuel:[],goals:[],maintenance:[],debts:[],debt_actions:[]},page='inicio',range='30';
+let sb=null,user=null,demo=false,signupMode=false,db={profiles:[],vehicles:[],shifts:[],movements:[],fuel:[],goals:[],maintenance:[],debts:[],debt_actions:[]},page='inicio',range='30';
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const toNum=v=>Math.round((Number(v)||0)*100)/100;
 const dateStr=s=>String(s||'').slice(0,10);
 function filterDate(d){let days=Number(range);if(!days)return true;let delta=(new Date(today()+'T12:00:00')-new Date(dateStr(d)+'T12:00:00'))/86400000;return delta>=0&&delta<days}
-function account(){return user?.email||'Usuario'}
+function account(){return db.profiles[0]?.display_name||user?.email||'Usuario'}
 async function init(){if(ready){try{const {createClient}=await import('https://esm.sh/@supabase/supabase-js@2.57.4');sb=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true}});const {data}=await sb.auth.getUser();user=data.user;sb.auth.onAuthStateChange((_evt,session)=>{const id=session?.user?.id;if(id!==user?.id){user=session?.user||null;setTimeout(()=>refresh(),0)}})}catch(e){root.innerHTML='<div class="auth">No se pudo iniciar la conexión: '+esc(e.message)+'</div>';return}}await refresh()}
 let dataError='';
-async function refresh(){if(user&&sb&&!demo){dataError='';const tables=Object.keys(db);const results=await Promise.all(tables.map(t=>sb.from(t).select('*').eq('user_id',user.id).order('created_at',{ascending:false})));results.forEach((r,i)=>{if(r.error){console.error(tables[i],r.error.message);db[tables[i]]=[];if(['debts','debt_actions'].includes(tables[i]))dataError='La sección Pagos necesita ejecutar migration_v3.sql en el proyecto exclusivo Mi Ruta PRO.';}else db[tables[i]]=r.data||[]})}render()}
-function loginView(){root.innerHTML=`<main class="auth"><div class="brand">🚘 Mi Ruta <b>PRO</b></div><h1>Tu control, tu ganancia</h1><p class="muted">Tus kilómetros, ingresos, gastos y metas en un solo lugar. Cada conductor tiene su cuenta privada.</p>${!ready?'<div class="notice"><b>Cuenta real pendiente:</b> aún falta conectar un proyecto Supabase independiente. El registro permanecerá cerrado hasta configurar la base de datos y la seguridad. Consulta README.md.</div>':''}<form id="authform"><label>Correo electrónico</label><input name="email" type="email" autocomplete="username" required/><label>Contraseña</label><input name="password" type="password" minlength="6" autocomplete="current-password" required/><div class="actions" style="margin-top:20px"><button class="btn" type="submit" ${!ready?'disabled':''}>Iniciar sesión</button><button class="btn secondary" id="signup" type="button" ${!ready?'disabled':''}>Crear cuenta</button></div><p class="help" id="authstatus">${ready?'También puedes crear una cuenta nueva usando tu correo.':'El registro estará disponible cuando se conecte la base de datos.'}</p></form><button id="demo-start" class="btn secondary demo-start" type="button">👀 Ver demostración (sin cuenta)</button></main>`;$('#demo-start').onclick=()=>{demo=true;user={id:'demostracion',email:'Demostración · sin datos reales'};db=seedDemo();page='inicio';render()};$('#authform').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const {error}=await sb.auth.signInWithPassword({email:f.get('email'),password:f.get('password')});$('#authstatus').textContent=error?error.message:'Acceso correcto';if(!error)await refresh()};$('#signup').onclick=async()=>{const f=new FormData($('#authform'));const {error}=await sb.auth.signUp({email:f.get('email'),password:f.get('password')});$('#authstatus').textContent=error?error.message:'Revisa tu correo para confirmar el registro si la verificación está activada.'}}
+async function refresh(){if(user&&sb&&!demo){dataError='';const tables=Object.keys(db);const results=await Promise.all(tables.map(t=>sb.from(t).select('*').eq('user_id',user.id).order('created_at',{ascending:false})));results.forEach((r,i)=>{if(r.error){console.error(tables[i],r.error.message);db[tables[i]]=[];if(['debts','debt_actions'].includes(tables[i]))dataError='La sección Pagos necesita ejecutar migration_v3.sql en el proyecto exclusivo Mi Ruta PRO.';}else db[tables[i]]=r.datafunction loginView(){
+  root.innerHTML=`<main class="auth auth-refresh">
+    <div class="brand">🚘 Mi Ruta <b>PRO</b></div>
+    <div class="step-indicator">TU NUEVA RUTA EMPIEZA AQUÍ</div>
+    <h1>${signupMode?'Crea tu cuenta':'Bienvenido de nuevo'}</h1>
+    <p class="muted">${signupMode?'Tus datos serán privados. Al entrar, configurarás tu vehículo y tu saldo inicial.':'Ingresa para consultar tus jornadas, combustible, grifos y pagos.'}</p>
+    ${!ready?'<div class="notice">La conexión con la base de datos no está disponible.</div>':''}
+    <form id="authform" autocomplete="on">
+      <label for="auth-email">Correo electrónico</label><input id="auth-email" name="email" type="email" autocomplete="email" maxlength="250" required />
+      <label for="auth-password">Contraseña ${signupMode?'· mínimo 8 caracteres':''}</label><input id="auth-password" name="password" type="password" minlength="${signupMode?8:6}" autocomplete="${signupMode?'new-password':'current-password'}" required />
+      ${signupMode?'<label for="auth-confirm">Confirmar contraseña</label><input id="auth-confirm" name="confirm_password" type="password" minlength="8" autocomplete="new-password" required />':''}
+      <div class="auth-controls"><button class="btn big" type="submit" ${!ready?'disabled':''}>${signupMode?'Crear mi cuenta':'Iniciar sesión'}</button>
+      <button class="btn secondary" id="toggle-mode" type="button">${signupMode?'Ya tengo cuenta':'Crear cuenta nueva'}</button></div>
+      <p class="help" id="authstatus" role="status" aria-live="polite">${signupMode?'Si se solicita confirmación, revisa tu correo antes de ingresar.':'¿Primera vez? Crea tu cuenta y configura tu punto de partida.'}</p>
+    </form>
+    <p class="auth-footnote">Cada conductor utiliza su propia cuenta. No hay datos de demostración ni ingresos precargados.</p>
+  </main>`;
+  $('#toggle-mode').onclick=()=>{signupMode=!signupMode;loginView()};
+  $('#authform').onsubmit=async e=>{
+    e.preventDefault();
+    const el=e.currentTarget, f=new FormData(el), email=String(f.get('email')||'').trim().toLowerCase(), password=String(f.get('password')||'');
+    const status=el.querySelector('#authstatus'), btn=el.querySelector('[type=submit]');
+    if(!ready||!sb){status.textContent='No hay conexión con la base de datos.';return}
+    if(signupMode&&(password.length<8||password!==f.get('confirm_password'))){status.textContent='Revisa las contraseñas: deben coincidir y tener al menos 8 caracteres.';return}
+    btn.disabled=true;status.textContent=signupMode?'Registrando cuenta...':'Validando acceso...';
+    try {
+      if(signupMode){
+        const {data,error}=await sb.auth.signUp({email,password,options:{emailRedirectTo:location.origin+location.pathname}});
+        if(error)throw error;
+        if(data?.session?.user){user=data.session.user;signupMode=false;await refresh()}
+        else{status.textContent='Solicitud enviada. Comprueba tu correo y confirma la cuenta antes de iniciar sesión. Después configura tu punto de partida.';el.querySelector('[name=password]').value='';el.querySelector('[name=confirm_password]').value=''}
+      }else{
+        const {data,error}=await sb.auth.signInWithPassword({email,password});
+        if(error)throw error;
+        user=data?.user||null;
+        if(!user)throw Error('No se pudo confirmar la sesión.');
+        await refresh();
+      }
+    }catch(err){status.textContent=String(err.message||'No se pudo completar el acceso.')}
+    finally{btn.disabled=false}
+  };
+}
+stá activada.'}}
 const pages=[['inicio','▦','Inicio'],['cierre','✓','Cierre rápido'],['jornadas','🚘','Jornadas'],['movimientos','💳','Movimientos'],['combustible','⛽','Combustible'],['analisis','📊','Análisis de días'],['metas','🎯','Metas'],['pagos','💰','Préstamos y pagos'],['mantenimiento','🔧','Mantenimiento'],['configuracion','⚙️','Mi vehículo']];
 function shell(){root.innerHTML=`<div class="layout"><aside class="sidebar"><div class="brand">🚘 Mi Ruta <b>PRO</b></div>${pages.map(([p,ico,label])=>`<button data-page="${p}" class="menu ${page===p?'active':''}">${ico} ${label}</button>`).join('')}</aside><main class="main"><header class="top"><div><h1 id="heading">${esc(pages.find(x=>x[0]===page)?.[2])}</h1><p class="muted">${demo?'🧪 Modo demostración · Datos ficticios, no se guardan':'🔒 '+esc(account())+' · Datos privados de tu cuenta'}</p></div><div class="actions"><select id="range" aria-label="Período"><option value="7">7 días</option><option value="30">30 días</option><option value="90">90 días</option><option value="0">Todo</option></select><button id="signout" class="btn secondary">Salir</button></div></header><div id="db-warning"></div><div id="content"></div><footer class="foot">Mi Ruta PRO · GFLM Systems · Tu control, tu ganancia</footer></main></div>`;$('#range').value=range;$('#range').onchange=e=>{range=e.target.value;render()};$('#signout').onclick=async()=>{if(demo){demo=false;user=null;db={profiles:[],vehicles:[],shifts:[],movements:[],fuel:[],goals:[],maintenance:[],debts:[],debt_actions:[]}}else await sb.auth.signOut();user=null;render()};document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>{page=b.dataset.page;render()})}
 const field=(label,name,type='text',extra='')=>`<div><label>${label}</label><input name="${name}" type="${type}" ${extra}/></div>`;
@@ -25,7 +66,7 @@ function costsFor(d){return db.movements.filter(m=>dateStr(m.date)===d&&m.kind==
 function summary(){const moves=db.movements.filter(m=>filterDate(m.date)),fuel=db.fuel.filter(f=>filterDate(f.date)),shifts=db.shifts.filter(s=>filterDate(s.date));let income=moves.filter(m=>m.kind==='ingreso').reduce((a,m)=>a+Number(m.amount),0),cost=moves.filter(m=>m.kind==='gasto_operativo').reduce((a,m)=>a+Number(m.amount),0)+fuel.reduce((a,f)=>a+Number(f.amount),0),personal=moves.filter(m=>m.kind==='gasto_personal').reduce((a,m)=>a+Number(m.amount),0),reloads=moves.filter(m=>m.kind==='recarga_app').reduce((a,m)=>a+Number(m.amount),0),km=shifts.reduce((a,s)=>a+Number(s.km_total),0),work=shifts.reduce((a,s)=>a+Number(s.km_work),0);const loanPayments=db.debt_actions.filter(a=>a.kind==='pay'&&filterDate(a.date)).reduce((a,x)=>a+Number(x.amount),0);return {income,cost,net:income-cost,personal,reloads,loanPayments,km,work,privateKm:km-work,shifts:shifts.length}}
 function dashboard(){
   const s=summary();
-  return `<section class="panel welcome"><div><p class="eyebrow">MI RUTA PRO · INTELLIGENCE</p><h2>Tu jornada, en orden y sin complicaciones.</h2><p>Registra una sola vez al terminar el día. Nosotros hacemos el análisis.</p></div><button class="btn big" data-go="cierre">✅ Cerrar mi día</button></section>
+  return `<section class="panel welcome"><div><p class="eyebrow">MI RUTA PRO · INTELLIGENCE</p><h2>${db.shifts.length?'Tu jornada, en orden y sin complicaciones.':'Tu cuenta está lista. Empieza con tu primera jornada.'}</h2><p>Registra una sola vez al terminar el día. Nosotros hacemos el análisis.</p></div><button class="btn big" data-go="cierre">✅ Cerrar mi día</button></section>
   <div class="cards">${[['Ingresos de trabajo',currency(s.income)],['Saldo neto operativo',currency(s.net)],['Costos operativos',currency(s.cost)],['Flujo después de salidas personales',currency(s.net-s.personal-s.reloads-s.loanPayments)]].map(([l,v])=>`<div class="card"><small>${l}</small><strong>${v}</strong></div>`).join('')}</div>
   <div class="cards">${[['Km totales',fmt(s.km)],['Km de trabajo',fmt(s.work)],['Km personales',fmt(s.privateKm)],['Saldo / km de trabajo',s.work?currency(s.net/s.work):'—']].map(([l,v])=>`<div class="card"><small>${l}</small><strong>${v}</strong></div>`).join('')}</div>
   <div class="split"><section class="panel"><h2>📊 ¿Qué día te deja mejor saldo?</h2>${weekdayAnalysis(true)}</section>
@@ -179,9 +220,83 @@ function wireDebtActions(){document.querySelectorAll('.debt-action').forEach(el=
  el.onsubmit=async e=>{e.preventDefault();const btn=el.querySelector('button[type=submit]');btn.disabled=true;try{await saveDebtAction(Object.fromEntries(new FormData(el)));await refresh()}catch(error){el.querySelector('.status').textContent=error.message}finally{btn.disabled=false}};
 })}
 function maint(){const odometer=[...db.shifts].sort((a,b)=>dateStr(b.date).localeCompare(dateStr(a.date)))[0]?.odometer_end??userCar()?.odometer_initial??0;return `<section class="panel"><h2>Nuevo mantenimiento programado</h2>${form('maintform',field('Concepto','name','text','required')+field('Próximo mantenimiento al km','due_km','number','min="0" step="1" required')+field('Costo estimado S/','estimated_cost','number','min="0" step="0.01" value="0"'))}</section><section class="panel"><h2>Próximas revisiones · Odómetro ${fmt(odometer)} km</h2>${db.maintenance.length?db.maintenance.map(m=>`<div class="card" style="margin-bottom:10px"><b>${esc(m.name)}</b><p>Vence en km ${fmt(m.due_km)} · <span class="${m.due_km<=odometer?'red':'green'}">${m.due_km<=odometer?'Vencido':fmt(m.due_km-odometer)+' km restantes'}</span></p><button class="btn danger" data-delete="maintenance:${m.id}">Eliminar</button></div>`).join(''):'<p class="empty">Sin mantenimientos programados</p>'}</section>`}
-function config(){const v=userCar();return `<section class="panel"><h2>Mi vehículo · Configuración inicial</h2><p class="help">El odómetro inicial no debe modificarse después de registrar jornadas; el historial depende de él.</p>${form('carform',field('Marca','brand','text',`value="${esc(v?.brand||'')}" required`)+field('Modelo','model','text',`value="${esc(v?.model||'')}" required`)+field('Año','year','number',`min="1950" max="2100" value="${esc(v?.year||2020)}" required`)+field('Odómetro inicial','odometer_initial','number',`min="0" step="0.1" value="${esc(v?.odometer_initial??'')}" required ${db.shifts.length?'readonly':''}`)+field('Meta ingresos / km S/','target_per_km','number',`step="0.01" value="${esc(v?.target_per_km??2)}" required`),v?'Actualizar vehículo':'Guardar vehículo')}</section><section class="panel"><h2>Privacidad y copias</h2><p class="help">Cada registro se identifica con el ID inmutable de tu sesión. Supabase aplica restricciones RLS por cuenta, tanto para lectura como escritura y eliminación. Ningún cliente debe usar claves de administrador.</p><button id="export" class="btn secondary">Descargar mis datos (JSON)</button></section>`}
+function config(){
+  const v=userCar();
+  if(!v)return `<section class="panel"><p class="notice">Primero configura tu punto de partida.</p></section>`;
+  const locked=db.shifts.length>0||db.movements.length>0||db.fuel.length>0||db.debt_actions.length>0;
+  return `<section class="panel"><h2>Mi punto de partida</h2>
+    <p class="help">Estos valores se registraron al crear la cuenta. No son ganancias ni consumos del día.</p>
+    <div class="cards starting-cards">
+      <div class="card"><small>Inicio</small><strong>${esc(v.started_on||'—')}</strong></div>
+      <div class="card"><small>Odómetro inicial</small><strong>${fmt(v.odometer_initial)} km</strong></div>
+      <div class="card"><small>Efectivo declarado</small><strong>${currency(v.opening_cash||0)}</strong></div>
+      <div class="card"><small>Billetera inicial</small><strong>${currency(v.opening_wallet||0)}</strong></div>
+    </div>
+  </section>
+  <section class="panel"><h2>Datos del vehículo</h2>
+    <p class="help">Puedes corregir los datos del vehículo. El odómetro inicial se bloquea después de guardar jornadas; los importes iniciales se bloquean al registrar movimientos.</p>
+    ${form('carform',
+     field('Marca','brand','text',`value="${esc(v.brand)}" required maxlength="70"`)+
+     field('Modelo','model','text',`value="${esc(v.model)}" required maxlength="70"`)+
+     field('Año','year','number',`min="1950" max="2100" value="${esc(v.year)}" required`)+
+     field('Odómetro inicial (km)','odometer_initial','number',`min="0" step="0.1" value="${esc(v.odometer_initial)}" required ${db.shifts.length?'readonly':''}`)+
+     field('Efectivo inicial (S/)','opening_cash','number',`step="0.01" min="0" value="${esc(v.opening_cash||0)}" required ${locked?'readonly':''}`)+
+     field('Saldo inicial de apps (S/)','opening_wallet','number',`step="0.01" min="0" value="${esc(v.opening_wallet||0)}" required ${locked?'readonly':''}`)+
+     field('Meta de ingresos por km (S/)','target_per_km','number',`step="0.01" min="0.01" value="${esc(v.target_per_km||2)}" required`),
+     'Guardar cambios')}
+  </section>
+  <section class="panel"><h2>Privacidad y copia de seguridad</h2><p class="help">Cada registro pertenece a tu cuenta, protegido por reglas de acceso individuales de Supabase.</p><button id="export" class="btn secondary" type="button">Descargar mis datos (JSON)</button></section>`;
+}
+function onboardingView(){
+  root.innerHTML=`<main class="setup-page"><section class="setup-shell">
+    <div class="setup-header"><div class="brand">🚘 Mi Ruta <b>PRO</b></div><button class="btn secondary small" id="setup-signout" type="button">Cerrar sesión</button></div>
+    <p class="step-indicator">CONFIGURACIÓN INICIAL · UNA SOLA VEZ</p>
+    <h1>¿Con cuánto comienzas tu ruta?</h1>
+    <p class="muted">Deja listo tu punto de partida. No necesitas cargar datos antiguos ni registrar cada viaje. Cuando termines de trabajar, cerrarás tu día en un minuto.</p>
+    <div class="setup-steps"><div><strong>1</strong> Cuenta creada</div><div class="current"><strong>2</strong> Punto de partida</div><div><strong>3</strong> Primera jornada</div></div>
+    <form id="setupform" class="fields setup-fields">
+      <div class="wide setup-heading">Tus datos</div>
+      <div class="wide"><label for="setup-name">¿Cómo te llamas?</label><input id="setup-name" name="display_name" type="text" maxlength="100" placeholder="Tu nombre" autocomplete="name" required /></div>
+      <div class="wide setup-heading">Tu vehículo</div>
+      <div><label for="setup-brand">Marca</label><input id="setup-brand" name="brand" type="text" maxlength="70" placeholder="Ej. Toyota" required /></div>
+      <div><label for="setup-model">Modelo</label><input id="setup-model" name="model" type="text" maxlength="70" placeholder="Ej. Yaris" required /></div>
+      <div><label for="setup-year">Año</label><input id="setup-year" name="year" type="number" min="1950" max="2100" value="${new Date().getFullYear()}" required /></div>
+      <div><label for="setup-date">Fecha en que empiezas</label><input id="setup-date" name="started_on" type="date" value="${today()}" required /></div>
+      <div class="wide"><label for="setup-odometer">¿Cuántos kilómetros marca tu carro ahora?</label><input id="setup-odometer" name="odometer_initial" type="number" min="0" step="0.1" placeholder="Ej. 32 450" required/><p class="help">Esta lectura es la referencia para calcular todo el kilometraje posterior. No se registra como una jornada.</p></div>
+      <div class="wide setup-heading">Dinero con el que comienzas</div>
+      <div><label for="setup-cash">Efectivo disponible (S/)</label><input id="setup-cash" name="opening_cash" type="number" step="0.01" min="0" value="0" required/></div>
+      <div><label for="setup-wallet">Saldo en apps o billetera (S/)</label><input id="setup-wallet" name="opening_wallet" type="number" step="0.01" min="0" value="0" required/></div>
+      <p class="help wide">Son saldos iniciales declarados, no ingresos de trabajo. Si prefieres no controlar una billetera, déjala en S/ 0. No calcularemos un saldo actual ficticio.</p>
+      <details class="wide extras"><summary>Personalizar mi meta (opcional)</summary><label for="setup-target">Meta por km trabajado (S/)</label><input id="setup-target" name="target_per_km" type="number" step="0.01" min="0.01" value="2" required/><p class="help">Puedes modificar esta meta después.</p></details>
+      <div class="wide"><button type="submit" class="btn big setup-submit">Guardar y empezar a trabajar</button><p class="help" id="setupstatus" role="status" aria-live="polite"></p></div>
+    </form>
+    <div class="setup-note">🔒 Estos datos pertenecen únicamente a tu cuenta. Podrás añadir tus pagos y préstamos después, sin que afecten tus ganancias iniciales.</div>
+  </section></main>`;
+  $('#setup-signout').onclick=async()=>{await sb.auth.signOut();user=null;db=Object.fromEntries(Object.keys(db).map(k=>[k,[]]));signupMode=false;render()};
+  $('#setupform').onsubmit=async e=>{
+    e.preventDefault();const form=e.currentTarget,btn=form.querySelector('[type=submit]'),status=$('#setupstatus');
+    btn.disabled=true;status.textContent='Guardando tu punto de partida...';
+    try {await saveOnboarding(Object.fromEntries(new FormData(form)));}catch(err){status.textContent=String(err.message||err)}finally{btn.disabled=false}
+  };
+}
+async function saveOnboarding(v){
+  if(!sb||!user)throw Error('Debes iniciar sesión.');
+  const name=String(v.display_name||'').trim(),brand=String(v.brand||'').trim(),model=String(v.model||'').trim();
+  const year=Number(v.year),km=Number(v.odometer_initial),cash=Number(v.opening_cash),wallet=Number(v.opening_wallet),target=Number(v.target_per_km);
+  if(!name||!brand||!model||name.length>100||brand.length>70||model.length>70||
+     !Number.isInteger(year)||year<1950||year>2100||[km,cash,wallet].some(n=>!Number.isFinite(n)||n<0)||
+     !Number.isFinite(target)||target<=0||!v.started_on) throw Error('Completa correctamente el vehículo, odómetro y saldos iniciales.');
+  const {error}=await sb.rpc('initialize_driver',{
+    p_display_name:name,p_brand:brand,p_model:model,p_year:year,
+    p_odometer_initial:km,p_opening_cash:cash,p_opening_wallet:wallet,
+    p_target_per_km:target,p_started_on:v.started_on
+  });
+  if(error)throw Error(error.message);
+  page='inicio';await refresh();
+}
 function render(){
  if(!user){loginView();return}
+ if(!demo&&!db.vehicles.length){onboardingView();return}
  shell();
  if(dataError)$('#db-warning').innerHTML=`<div class="notice">${esc(dataError)}</div>`;
  const content=$('#content');
@@ -203,30 +318,25 @@ async function saveMove(v){if(Number(v.amount)<=0)throw Error('Monto no válido.
 async function saveFuel(v){if(Number(v.quantity)<=0||Number(v.amount)<=0)throw Error('Importe y cantidad deben ser positivos.');if(!String(v.station||'').trim())throw Error('Indica el nombre del grifo.');await insert('fuel',{date:v.date,fuel_type:v.fuel_type,station:v.station.trim(),odometer:Number(v.odometer),amount:toNum(v.amount),quantity:Number(v.quantity),full_tank:v.full_tank==='Sí',exclusive_usage:v.exclusive_usage==='Sí',note:v.note||''})}
 async function saveGoal(v){await insert('goals',{name:v.name,target:toNum(v.target),reserved:toNum(v.reserved),deadline:v.deadline})}
 async function saveMaint(v){await insert('maintenance',{name:v.name,due_km:Number(v.due_km),estimated_cost:toNum(v.estimated_cost)})}
-async function saveCar(v){const payload={brand:v.brand,model:v.model,year:Number(v.year),odometer_initial:Number(v.odometer_initial),target_per_km:toNum(v.target_per_km)};if(db.vehicles.length){if(demo)db.vehicles[0]={...db.vehicles[0],...payload};else{const {error}=await sb.from('vehicles').update(payload).eq('id',db.vehicles[0].id).eq('user_id',user.id);if(error)throw error}}else await insert('vehicles',payload)}
-
-function seedDemo(){
-  const data={profiles:[],debts:[],debt_actions:[],vehicles:[{id:'demo-auto',brand:'Vehículo',model:'De ejemplo',year:2024,odometer_initial:12200,target_per_km:2,created_at:new Date().toISOString()}],shifts:[],movements:[],fuel:[],goals:[],maintenance:[]};
-  const now=new Date(today()+'T12:00:00Z');let previous=12200;
-  const getDate=offset=>{const dt=new Date(now);dt.setUTCDate(dt.getUTCDate()+offset);return dt.toISOString().slice(0,10)};
-  for(let i=0;i<21;i++){
-    const date=getDate(i-21),wd=(new Date(date+'T12:00:00Z').getUTCDay()+6)%7;
-    const km=52+(i%4)*8,work=km-9,odo=previous+km;
-    data.shifts.push({id:'s'+i,date,odometer_start:previous,odometer_end:odo,km_total:km,km_work:work,created_at:new Date().toISOString()});
-    data.movements.push({id:'m'+i,date,kind:'ingreso',category:'Viajes',amount:wd===5?210:wd===4?185:wd===0?90:135+(i%3)*6,created_at:new Date().toISOString()});
-    data.movements.push({id:'c'+i,date,kind:'gasto_operativo',category:'Otros costos',amount:6+(i%3),created_at:new Date().toISOString()});
-    previous=odo;
-  }
-  const stations=['Grifo Los Olivos','Grifo Los Olivos','Grifo Los Olivos','Grifo Central','Grifo Central','Grifo Central','Grifo Los Olivos'];
-  for(let j=0;j<7;j++){
-    const shift=data.shifts[2+j*3];
-    const qty=20+(j%3)*.5;
-    data.fuel.push({id:'f'+j,date:shift.date,fuel_type:'GLP',station:stations[j],odometer:shift.odometer_end,amount:qty*2.7,quantity:qty,full_tank:true,exclusive_usage:true,created_at:new Date().toISOString()});
-  }
-  const due=getDate(5);
-  data.debts=[{id:'demo-debt-1',name:'Cuota del préstamo',kind:'Préstamo',amount:1000,due_date:due,created_at:new Date().toISOString()}];
-  data.debt_actions=[{id:'demo-res-1',debt_id:'demo-debt-1',kind:'reserve',amount:100,from_reserved:0,date:today(),created_at:new Date().toISOString()}];
-  return data;
+async function saveCar(v){
+  const current=userCar();
+  const payload={
+    brand:String(v.brand||'').trim(),model:String(v.model||'').trim(),year:Number(v.year),
+    odometer_initial:Number(v.odometer_initial),target_per_km:toNum(v.target_per_km),
+    opening_cash:toNum(v.opening_cash),opening_wallet:toNum(v.opening_wallet)
+  };
+  if(!current)throw Error('Primero completa la configuración inicial.');
+  if(!payload.brand||!payload.model||payload.year<1950||payload.year>2100||
+    !Number.isFinite(payload.odometer_initial)||payload.odometer_initial<0||
+    !Number.isFinite(payload.opening_cash)||payload.opening_cash<0||
+    !Number.isFinite(payload.opening_wallet)||payload.opening_wallet<0||
+    payload.target_per_km<=0)throw Error('Revisa los datos del vehículo.');
+  if(db.shifts.length&&payload.odometer_initial!==Number(current.odometer_initial))
+    throw Error('No se puede cambiar el odómetro inicial después de registrar jornadas.');
+  const locked=db.shifts.length>0||db.movements.length>0||db.fuel.length>0||db.debt_actions.length>0;
+  if(locked&&(payload.opening_cash!==Number(current.opening_cash)||payload.opening_wallet!==Number(current.opening_wallet)))
+    throw Error('Los saldos iniciales se bloquean después de registrar movimientos.');
+  const {error}=await sb.from('vehicles').update(payload).eq('id',current.id).eq('user_id',user.id);
+  if(error)throw error;
 }
-
 init();

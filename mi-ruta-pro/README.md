@@ -45,3 +45,13 @@ Con Node.js 18+: `node --test tests/analytics.test.mjs`. Sin Node, la web se pue
 - Base de datos nueva: `schema.sql` (incluye V2 y V3). Base existente Mi Ruta PRO V2: ejecutar `migration_v3.sql` **solo allí**. Nunca aplicar en FHERDANI PRO.
 - Para despliegues con cuentas reales, ejecutar la migración antes de activar la nueva versión. Las pruebas de aislamiento RLS requieren dos cuentas reales de prueba y conexión a la base propia.
 - En demostración los registros son temporales. Un apartado declarado no demuestra que el dinero exista en una billetera o cuenta bancaria.
+
+## V4 — Inicio real en cero (noviembre de 2026)
+
+- Proyecto Supabase independiente, con tablas vacías inicialmente. No se borran datos de otras cuentas ni de FHERDANI PRO.
+- El botón de demostración se ha quitado de la pantalla principal para comenzar con datos reales.
+- Registro de correo y contraseña desde la web, verificación de correo según la configuración de Supabase y sesión privada por usuario.
+- A la primera entrada, si la cuenta todavía no tiene vehículo, la pantalla de configuración solicita nombre, marca/modelo/año, fecha de inicio, odómetro inicial, efectivo inicial y billetera inicial (ambos pueden ser S/ 0), más meta por km opcional.
+- El formulario usa `initialize_driver` para crear perfil y vehículo de forma atómica, respetando RLS. Los saldos iniciales son referencias y **nunca** ingresos ni gastos operativos.
+- Antes de usar la aplicación real: en Supabase Authentication → URL Configuration, configurar Site URL `https://mi-ruta-pro.vercel.app` y Redirect URLs autorizadas. No compartir contraseñas en ChatGPT ni almacenarlas en GitHub.
+- Si el proyecto ya está en V3, ejecutar únicamente `migration_v4.sql`; para instalación desde cero, el archivo `schema.sql` actualizado contiene todas las migraciones.

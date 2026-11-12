@@ -116,4 +116,41 @@ tbody tr:hover{background:#FCF7F1}
  .card:hover{transform:none}
  .welcome{padding:18px}
 }
+
+/* Alta real y punto de partida del conductor */
+.auth-refresh{margin:6vh auto;max-width:475px}
+.auth-controls{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:22px}
+.auth-controls .btn{min-height:47px}
+.auth-footnote{font-size:12px;color:#7B6D60;margin-top:24px}
+.step-indicator{letter-spacing:1.7px;text-transform:uppercase;font-size:11px;font-weight:800;color:#9F654B}
+.setup-page{min-height:100vh;padding:36px 16px 60px;background:radial-gradient(circle at top right,#F6E7D9 0%,#F8F5F0 45%,#F5EFE6 100%)}
+.setup-shell{max-width:840px;margin:auto;background:#FFFEFB;border:1px solid #E7DBD0;border-radius:23px;padding:26px 34px;box-shadow:0 13px 45px rgba(74,52,34,.075)}
+.setup-header{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.setup-header .brand{padding:0}
+.setup-shell h1{font-size:29px;letter-spacing:-.8px;margin:9px 0}
+.setup-shell .muted{font-size:14px;max-width:640px}
+.setup-steps{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0;padding-bottom:17px;border-bottom:1px solid #EDE2D7}
+.setup-steps>div{display:flex;align-items:center;gap:8px;background:#F6F0E9;border-radius:100px;padding:7px 12px;color:#70645A;font-size:12px}
+.setup-steps>div strong{display:grid;place-items:center;background:#E7D8C8;color:#6B5242;width:22px;height:22px;border-radius:100px}
+.setup-steps>div.current{color:#85452F;background:#F4E2D5;font-weight:700}
+.setup-steps>div.current strong{background:#AD6850;color:white}
+.setup-fields{gap:10px 16px}
+.setup-heading{font-weight:800;color:#59483D;letter-spacing:-.2px;padding:13px 0 4px;border-bottom:1px solid #F0E5D9}
+.setup-fields label{font-size:13px;margin:4px 0 6px}
+.setup-fields input{min-height:44px}
+.setup-fields .help{margin:7px 0 0}
+.setup-submit{width:100%;margin-top:20px;min-height:52px}
+.setup-note{margin-top:20px;background:#F8F1EA;border-radius:12px;color:#6D5E51;padding:13px 16px;font-size:12px}
+.starting-cards .card strong{font-size:20px}
+@media(max-width:690px){
+ .setup-page{padding:10px 8px 32px}
+ .setup-shell{padding:20px 16px;border-radius:16px}
+ .setup-shell h1{font-size:24px}
+ .setup-steps{gap:5px}
+ .setup-steps>div{padding:5px 8px;font-size:10px}
+ .setup-steps>div strong{width:19px;height:19px}
+ .auth-controls{grid-template-columns:1fr}
+ .starting-cards .card strong{font-size:16px}
+}
+
 </style></head><body><div id="root"></div><script type="module" src="app.js"></script></body></html>
