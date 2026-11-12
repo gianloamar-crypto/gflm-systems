@@ -448,20 +448,20 @@ async function saveOnboarding(v){
 function changePasswordView(){
  root.innerHTML=`<main class="auth auth-refresh"><div class="brand">🚘 Mi Ruta <b>PRO</b></div>
  <p class="step-indicator">PRIMER INGRESO · SEGURIDAD</p><h1>Crea tu contraseña personal</h1>
- <p class="muted">El propietario te entregó una contraseña temporal. Elige ahora una que solamente tú conozcas.</p>
+ <p class="muted">Ingresa una contraseña que solamente tú conozcas. Después pasarás automáticamente a <b>¿Con cuánto comienzas tu ruta?</b> para registrar tu dinero y kilometraje inicial.</p>
  <form id="change-password-form">
- <label>Nueva contraseña (12 caracteres o más)</label><input type="password" name="password" minlength="12" autocomplete="new-password" required />
- <label>Confirmar contraseña</label><input type="password" name="confirmation" minlength="12" autocomplete="new-password" required />
+ <label>Nueva contraseña personal (8 caracteres o más)</label><input type="password" name="password" minlength="8" autocomplete="new-password" required />
+ <label>Confirmar contraseña</label><input type="password" name="confirmation" minlength="8" autocomplete="new-password" required />
  <div class="auth-controls"><button class="btn big" type="submit">Guardar mi contraseña</button><button class="btn secondary" id="pass-signout" type="button">Salir</button></div>
  <p id="pass-status" class="help" role="status" aria-live="polite">No entregues tu nueva contraseña al propietario ni a otras personas.</p></form></main>`;
  $('#pass-signout').onclick=async()=>{await sb.auth.signOut();user=null;await refresh()};
  $('#change-password-form').onsubmit=async e=>{
   e.preventDefault();const form=e.currentTarget,v=Object.fromEntries(new FormData(form)),status=$('#pass-status'),btn=form.querySelector('[type=submit]');
-  if(String(v.password).length<12||v.password!==v.confirmation){status.textContent='Las claves deben coincidir y tener 12 caracteres como mínimo.';return}
+  if(String(v.password).length<8||v.password!==v.confirmation){status.textContent='Las claves deben coincidir y tener 8 caracteres como mínimo.';return}
   btn.disabled=true;status.textContent='Guardando...';
   try{
    const {error}=await sb.auth.updateUser({password:String(v.password)});
-   if(error)throw error;form.reset();await refresh();
+   if(error)throw error;form.reset();page='inicio';await refresh();
    if(myLicense?.must_change_password)status.textContent='Contraseña cambiada. Si no avanzas, recarga la página.';
   }catch(err){status.textContent=String(err.message||'No se pudo cambiar la contraseña.')}
   finally{btn.disabled=false}
@@ -492,7 +492,7 @@ function adminView(){
    <div><label>Vence</label><input type="date" name="expires_at" value="${esc(x.expires_at||'')}"/></div>
    <button type="submit" class="btn">Guardar</button>
   </div>
-  <div class="customer-quick"><button type="button" class="btn secondary small" data-duration="7">+7 días</button><button type="button" class="btn secondary small" data-duration="30">+30 días</button><button type="button" class="btn secondary small" data-duration="90">+90 días</button><button type="button" class="btn secondary small" data-password-reset="${esc(x.user_id)}">Restablecer clave</button><span class="help customer-feedback" role="status"></span></div>
+  <div class="customer-quick"><button type="button" class="btn secondary small" data-duration="7">+7 días</button><button type="button" class="btn secondary small" data-duration="30">+30 días</button><button type="button" class="btn secondary small" data-duration="90">+90 días</button><input type="password" name="reset_password" class="customer-reset-pass" autocomplete="new-password" minlength="8" maxlength="72" placeholder="Nueva clave temporal"/><button type="button" class="btn secondary small" data-password-reset="${esc(x.user_id)}">Cambiar clave temporal</button><span class="help customer-feedback" role="status"></span></div>
  ${ownerFinancialClientPanel(x)}
  </form>`).join('');
  return `<section class="panel welcome admin-hero"><div><p class="eyebrow">MI RUTA PRO · PROPIETARIO</p><h2>Control de clientes y suscripciones</h2><p>Aprueba solicitudes, define vencimientos y suspende accesos. Solo recibes totales por día, semana y mes. No se muestran viajes ni movimientos individuales.</p></div><button class="btn secondary" id="admin-reload" type="button">Actualizar</button></section>
@@ -506,6 +506,7 @@ function adminView(){
  <div><label>Correo del cliente</label><input name="email" type="email" maxlength="250" required/></div>
  <div><label>Plan</label><select name="plan"><option>Mensual</option><option>Trimestral</option><option>Anual</option><option>Cortesía</option></select></div>
  <div><label>Vencimiento</label><input name="expires_at" type="date" min="${today()}" value="${(()=>{const d=new Date(today()+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+30);return d.toISOString().slice(0,10)})()}" required/></div>
+ <div class="wide"><label for="owner-temp-password">Contraseña temporal que tú entregarás</label><input id="owner-temp-password" name="password" type="password" minlength="8" maxlength="72" autocomplete="new-password" placeholder="Mínimo 8 caracteres: letras y números" required/><p class="help">Tú eliges esta contraseña. Al ingresar por primera vez, el cliente deberá reemplazarla.</p></div>
  <div class="wide"><button class="btn big" type="submit">Crear y activar cuenta</button><p class="help" id="create-client-status" role="status"></p></div>
  </form><div id="issued-account" class="credentials-once hidden" aria-live="polite"></div>
  </section>
@@ -543,24 +544,27 @@ function addAdminCreateActions(){
  const form=$('#create-client-form');
  if(form)form.onsubmit=async e=>{
   e.preventDefault();const values=Object.fromEntries(new FormData(form)),btn=form.querySelector('[type=submit]'),status=$('#create-client-status');
-  if(!values.email||!values.name||!values.expires_at||values.expires_at<today()){status.textContent='Completa correo, nombre y fecha de vencimiento.';return}
+  if(!values.email||!values.name||!values.expires_at||values.expires_at<today()||!values.password||values.password.length<8){status.textContent='Completa el correo, el plan, el vencimiento y la clave temporal (8 caracteres mínimo).';return}
   btn.disabled=true;status.textContent='Creando cuenta...';
   try{
-   const {data,error}=await sb.functions.invoke('manage-clients',{body:{action:'create',email:values.email,name:values.name,plan:values.plan,expires_at:values.expires_at}});
+   const {data,error}=await sb.functions.invoke('manage-clients',{body:{action:'create',email:values.email,name:values.name,plan:values.plan,expires_at:values.expires_at,password:values.password}});
    if(error){let msg=error.message;try{msg=(await error.context.json()).error||msg}catch{}throw Error(msg)}
-   if(!data?.ok||!data.temporary_password)throw Error(data?.error||'No se recibió la contraseña temporal.');
-   await refresh();showIssuedAccess(data.email,data.temporary_password,'Cuenta creada. Entrega estos datos al cliente:');
+   if(!data?.ok)throw Error(data?.error||'No se pudo crear la cuenta.');
+   const chosenPassword=values.password;form.reset();await refresh();showIssuedAccess(data.email,chosenPassword,'Cuenta creada. Entrega estos datos al cliente:');
   }catch(err){status.textContent=String(err.message||err)}finally{btn.disabled=false}
  };
  document.querySelectorAll('[data-password-reset]').forEach(btn=>btn.onclick=async()=>{
    const id=btn.dataset.passwordReset,client=customerList.find(c=>c.user_id===id);
-   if(!client||!confirm(`¿Generar nueva contraseña para ${client.email}? La anterior dejará de funcionar.`))return;
+   const password=btn.closest('.customer-line')?.querySelector('[name=reset_password]')?.value||'';
+   if(!client)return;
+   if(password.length<8){alert('Escribe una contraseña temporal de al menos 8 caracteres antes de continuar.');return}
+   if(!confirm(`¿Cambiar la contraseña temporal de ${client.email}? La anterior dejará de funcionar.`))return;
    btn.disabled=true;
    try{
-    const {data,error}=await sb.functions.invoke('manage-clients',{body:{action:'reset',user_id:id}});
+    const {data,error}=await sb.functions.invoke('manage-clients',{body:{action:'reset',user_id:id,password}});
     if(error){let msg=error.message;try{msg=(await error.context.json()).error||msg}catch{}throw Error(msg)}
-    if(!data?.ok||!data.temporary_password)throw Error(data?.error||'No se recibió la clave.');
-    await refresh();showIssuedAccess(data.email,data.temporary_password,'Nueva contraseña temporal:');
+    if(!data?.ok)throw Error(data?.error||'No se pudo actualizar la clave.');
+    await refresh();showIssuedAccess(data.email,password,'Nueva contraseña temporal:');
    }catch(err){alert(String(err.message||err))}finally{btn.disabled=false}
  });
 }
