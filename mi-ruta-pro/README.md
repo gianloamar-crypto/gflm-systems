@@ -81,3 +81,10 @@ No habilitar una cuenta de propietario sin verificar primero que el correo le pe
 - La cuenta propietaria no aparece en la cola de clientes pendientes.
 - Para actualizar desde V5, aplicar `migration_v6_owner_access.sql`. Para instalaciones nuevas, `schema.sql` incluye la política más reciente.
 - Confirmar el correo antes de usar la cuenta. No compartir claves privadas ni contraseñas.
+
+## V7 — Solo el propietario crea las cuentas
+- Registro público retirado de la interfaz. «Mis clientes» permite generar cuentas desde una Edge Function segura `manage-clients`.
+- Las credenciales temporales se muestran una sola vez al propietario; no se almacenan en el navegador ni en el repositorio.
+- Primer acceso: cambio de contraseña obligatorio; trigger protegido `customer_password_updated` elimina el requisito tras cambiarla.
+- La clave privada de administración permanece en Supabase Edge Functions.
+- Para impedir incluso el registro directo por API, en Supabase Dashboard → Authentication → Providers, desactivar **Allow new users to sign up**. No hay herramienta conectada para cambiar ese ajuste desde esta conversación.

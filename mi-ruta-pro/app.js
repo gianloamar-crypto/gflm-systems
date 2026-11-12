@@ -18,13 +18,13 @@ async function refresh(){
   dataError='';
   const [roleResult,licenseResult]=await Promise.all([
    sb.from('app_admins').select('user_id').eq('user_id',user.id).maybeSingle(),
-   sb.from('customer_accounts').select('user_id,email,status,plan,expires_at,created_at').eq('user_id',user.id).maybeSingle()
+   sb.from('customer_accounts').select('user_id,email,status,plan,expires_at,created_at,must_change_password').eq('user_id',user.id).maybeSingle()
   ]);
   if(roleResult.error){console.error(roleResult.error.message);dataError='No se pudo verificar tu rol.'}
   if(licenseResult.error){console.error(licenseResult.error.message);dataError='No se pudo comprobar el acceso.'}
   isAdmin=!!roleResult.data?.user_id;myLicense=licenseResult.data||null;
   if(isAdmin){
-    const listing=await sb.from('customer_accounts').select('user_id,email,status,plan,expires_at,created_at').order('created_at',{ascending:false});
+    const listing=await sb.from('customer_accounts').select('user_id,email,status,plan,expires_at,created_at,must_change_password').order('created_at',{ascending:false});
     if(listing.error){console.error(listing.error.message);dataError='No se pudo consultar clientes.';customerList=[]}
     else customerList=(listing.data||[]).filter(a=>a.user_id!==user.id);
   }else customerList=[];
@@ -38,46 +38,29 @@ async function refresh(){
  render();
 }
 function loginView(){
-  root.innerHTML=`<main class="auth auth-refresh">
-    <div class="brand">🚘 Mi Ruta <b>PRO</b></div>
-    <div class="step-indicator">TU NUEVA RUTA EMPIEZA AQUÍ</div>
-    <h1>${signupMode?'Crea tu cuenta':'Bienvenido de nuevo'}</h1>
-    <p class="muted">${signupMode?'Solicita tu cuenta. El propietario revisará tu solicitud y autorizará el acceso.':'Ingresa para consultar tus jornadas, combustible, grifos y pagos.'}</p>
-    ${!ready?'<div class="notice">La conexión con la base de datos no está disponible.</div>':''}
-    <form id="authform" autocomplete="on">
-      <label for="auth-email">Correo electrónico</label><input id="auth-email" name="email" type="email" autocomplete="email" maxlength="250" required />
-      <label for="auth-password">Contraseña ${signupMode?'· mínimo 8 caracteres':''}</label><input id="auth-password" name="password" type="password" minlength="${signupMode?8:6}" autocomplete="${signupMode?'new-password':'current-password'}" required />
-      ${signupMode?'<label for="auth-confirm">Confirmar contraseña</label><input id="auth-confirm" name="confirm_password" type="password" minlength="8" autocomplete="new-password" required />':''}
-      <div class="auth-controls"><button class="btn big" type="submit" ${!ready?'disabled':''}>${signupMode?'Solicitar cuenta':'Iniciar sesión'}</button>
-      <button class="btn secondary" id="toggle-mode" type="button">${signupMode?'Ya tengo cuenta':'Crear cuenta nueva'}</button></div>
-      <p class="help" id="authstatus" role="status" aria-live="polite">${signupMode?'Confirma tu correo si se solicita. Después, espera la aprobación del propietario.':'¿Primera vez? Solicita tu cuenta y espera la activación.'}</p>
-    </form>
-    <p class="auth-footnote">Cada conductor utiliza su propia cuenta. No hay datos de demostración ni ingresos precargados.</p>
-  </main>`;
-  $('#toggle-mode').onclick=()=>{signupMode=!signupMode;loginView()};
-  $('#authform').onsubmit=async e=>{
-    e.preventDefault();
-    const el=e.currentTarget, f=new FormData(el), email=String(f.get('email')||'').trim().toLowerCase(), password=String(f.get('password')||'');
-    const status=el.querySelector('#authstatus'), btn=el.querySelector('[type=submit]');
-    if(!ready||!sb){status.textContent='No hay conexión con la base de datos.';return}
-    if(signupMode&&(password.length<8||password!==f.get('confirm_password'))){status.textContent='Revisa las contraseñas: deben coincidir y tener al menos 8 caracteres.';return}
-    btn.disabled=true;status.textContent=signupMode?'Registrando cuenta...':'Validando acceso...';
-    try {
-      if(signupMode){
-        const {data,error}=await sb.auth.signUp({email,password,options:{emailRedirectTo:location.origin+location.pathname}});
-        if(error)throw error;
-        if(data?.session?.user){user=data.session.user;signupMode=false;await refresh()}
-        else{status.textContent='Solicitud registrada. Confirma el correo si se solicita y espera la aprobación del propietario.';el.querySelector('[name=password]').value='';el.querySelector('[name=confirm_password]').value=''}
-      }else{
-        const {data,error}=await sb.auth.signInWithPassword({email,password});
-        if(error)throw error;
-        user=data?.user||null;
-        if(!user)throw Error('No se pudo confirmar la sesión.');
-        await refresh();
-      }
-    }catch(err){status.textContent=String(err.message||'No se pudo completar el acceso.')}
-    finally{btn.disabled=false}
-  };
+ root.innerHTML=`<main class="auth auth-refresh">
+ <div class="brand">🚘 Mi Ruta <b>PRO</b></div>
+ <p class="step-indicator">ACCESO SOLO CON CUENTA ASIGNADA</p>
+ <h1>Bienvenido a Mi Ruta PRO</h1>
+ <p class="muted">Ingresa con las credenciales que te entregó el propietario.</p>
+ ${!ready?'<div class="notice">La conexión con la base de datos no está disponible.</div>':''}
+ <form id="authform"><label>Correo electrónico</label><input name="email" type="email" autocomplete="username" required />
+ <label>Contraseña</label><input name="password" type="password" minlength="6" autocomplete="current-password" required />
+ <div class="auth-controls"><button class="btn big" type="submit" ${!ready?'disabled':''}>Ingresar a mi cuenta</button></div>
+ <p id="authstatus" class="help" role="status" aria-live="polite">Si no tienes acceso, solicita tu cuenta al propietario.</p>
+ </form><p class="auth-footnote">No hay registro público. Todas las cuentas las entrega el administrador.</p></main>`;
+ $('#authform').onsubmit=async e=>{
+  e.preventDefault();const el=e.currentTarget,f=new FormData(el),status=$('#authstatus'),btn=el.querySelector('[type=submit]');
+  btn.disabled=true;status.textContent='Validando acceso...';
+  try{
+   if(!ready||!sb)throw Error('No hay conexión con la base de datos.');
+   const {data,error}=await sb.auth.signInWithPassword({email:String(f.get('email')||'').trim(),password:String(f.get('password')||'')});
+   if(error)throw error;
+   user=data?.user||null;if(!user)throw Error('La sesión no se pudo verificar.');
+   await refresh();
+  }catch(err){status.textContent=String(err.message||'No se pudo iniciar sesión.')}
+  finally{btn.disabled=false}
+ };
 }
 const pages=[['inicio','▦','Inicio'],['cierre','✓','Cierre rápido'],['jornadas','🚘','Jornadas'],['movimientos','💳','Movimientos'],['combustible','⛽','Combustible'],['analisis','📊','Análisis de días'],['metas','🎯','Metas'],['pagos','💰','Préstamos y pagos'],['mantenimiento','🔧','Mantenimiento'],['configuracion','⚙️','Mi vehículo']];
 function shell(){root.innerHTML=`<div class="layout"><aside class="sidebar"><div class="brand">🚘 Mi Ruta <b>PRO</b></div>${(isAdmin?[...pages,['administracion','👑','Mis clientes']]:pages).map(([p,ico,label])=>`<button data-page="${p}" class="menu ${page===p?'active':''}">${ico} ${label}</button>`).join('')}</aside><main class="main"><header class="top"><div><h1 id="heading">${esc(pages.find(x=>x[0]===page)?.[2]||(page==='administracion'?'Mis clientes':'Inicio'))}</h1><p class="muted">${demo?'🧪 Modo demostración · Datos ficticios, no se guardan':'🔒 '+esc(account())+' · Datos privados de tu cuenta'}</p></div><div class="actions"><select id="range" aria-label="Período"><option value="7">7 días</option><option value="30">30 días</option><option value="90">90 días</option><option value="0">Todo</option></select><button id="signout" class="btn secondary">Salir</button></div></header><div id="db-warning"></div><div id="content"></div><footer class="foot">Mi Ruta PRO · GFLM Systems · Tu control, tu ganancia</footer></main></div>`;$('#range').value=range;$('#range').onchange=e=>{range=e.target.value;render()};$('#signout').onclick=async()=>{if(demo){demo=false;user=null;db={profiles:[],vehicles:[],shifts:[],movements:[],fuel:[],goals:[],maintenance:[],debts:[],debt_actions:[]}}else await sb.auth.signOut();user=null;render()};document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>{page=b.dataset.page;render()})}
@@ -320,6 +303,28 @@ async function saveOnboarding(v){
   if(error)throw Error(error.message);
   page='inicio';await refresh();
 }
+function changePasswordView(){
+ root.innerHTML=`<main class="auth auth-refresh"><div class="brand">🚘 Mi Ruta <b>PRO</b></div>
+ <p class="step-indicator">PRIMER INGRESO · SEGURIDAD</p><h1>Crea tu contraseña personal</h1>
+ <p class="muted">El propietario te entregó una contraseña temporal. Elige ahora una que solamente tú conozcas.</p>
+ <form id="change-password-form">
+ <label>Nueva contraseña (12 caracteres o más)</label><input type="password" name="password" minlength="12" autocomplete="new-password" required />
+ <label>Confirmar contraseña</label><input type="password" name="confirmation" minlength="12" autocomplete="new-password" required />
+ <div class="auth-controls"><button class="btn big" type="submit">Guardar mi contraseña</button><button class="btn secondary" id="pass-signout" type="button">Salir</button></div>
+ <p id="pass-status" class="help" role="status" aria-live="polite">No entregues tu nueva contraseña al propietario ni a otras personas.</p></form></main>`;
+ $('#pass-signout').onclick=async()=>{await sb.auth.signOut();user=null;await refresh()};
+ $('#change-password-form').onsubmit=async e=>{
+  e.preventDefault();const form=e.currentTarget,v=Object.fromEntries(new FormData(form)),status=$('#pass-status'),btn=form.querySelector('[type=submit]');
+  if(String(v.password).length<12||v.password!==v.confirmation){status.textContent='Las claves deben coincidir y tener 12 caracteres como mínimo.';return}
+  btn.disabled=true;status.textContent='Guardando...';
+  try{
+   const {error}=await sb.auth.updateUser({password:String(v.password)});
+   if(error)throw error;form.reset();await refresh();
+   if(myLicense?.must_change_password)status.textContent='Contraseña cambiada. Si no avanzas, recarga la página.';
+  }catch(err){status.textContent=String(err.message||'No se pudo cambiar la contraseña.')}
+  finally{btn.disabled=false}
+ };
+}
 function subscriptionView(){
  const s=accountState(myLicense);
  const msg=s==='Pendiente'?'Tu solicitud está registrada. El propietario debe aprobar tu cuenta y asignar un período de uso.':s==='Suspendida'?'El propietario ha suspendido temporalmente tu acceso. Tus datos se conservan.':s==='Vencida'?'Tu período terminó. Solicita una renovación al propietario para continuar.':'Tu cuenta aún no está habilitada.';
@@ -345,14 +350,26 @@ function adminView(){
    <div><label>Vence</label><input type="date" name="expires_at" value="${esc(x.expires_at||'')}"/></div>
    <button type="submit" class="btn">Guardar</button>
   </div>
-  <div class="customer-quick"><button type="button" class="btn secondary small" data-duration="7">+7 días</button><button type="button" class="btn secondary small" data-duration="30">+30 días</button><button type="button" class="btn secondary small" data-duration="90">+90 días</button><span class="help customer-feedback" role="status"></span></div>
+  <div class="customer-quick"><button type="button" class="btn secondary small" data-duration="7">+7 días</button><button type="button" class="btn secondary small" data-duration="30">+30 días</button><button type="button" class="btn secondary small" data-duration="90">+90 días</button><button type="button" class="btn secondary small" data-password-reset="${esc(x.user_id)}">Restablecer clave</button><span class="help customer-feedback" role="status"></span></div>
  </form>`).join('');
  return `<section class="panel welcome admin-hero"><div><p class="eyebrow">MI RUTA PRO · PROPIETARIO</p><h2>Control de clientes y suscripciones</h2><p>Aprueba solicitudes, define vencimientos y suspende accesos. Los datos financieros de cada conductor siguen privados.</p></div><button class="btn secondary" id="admin-reload" type="button">Actualizar</button></section>
  <div class="cards admin-stats">${cards.map(([k,v])=>`<div class="card"><small>${k}</small><strong>${v}</strong></div>`).join('')}</div>
- <section class="panel"><div class="charttitle"><div><h2>Clientes registrados</h2><p class="help">Los clientes solicitan la cuenta; tú decides quién puede usarla. Activar no cobra dinero.</p></div><span class="tag">${totals.users} cuenta(s)</span></div>${list||'<div class="empty">Todavía no hay clientes. Las solicitudes aparecerán aquí.</div>'}</section>
+ <section class="panel create-client-panel">
+ <h2>➕ Crear cuenta para un cliente</h2>
+ <p class="help">Tú creas la cuenta y entregas las credenciales. Se genera una contraseña temporal segura.</p>
+ <form id="create-client-form" class="fields">
+ <div><label>Nombre del cliente</label><input name="name" type="text" maxlength="100" required/></div>
+ <div><label>Correo del cliente</label><input name="email" type="email" maxlength="250" required/></div>
+ <div><label>Plan</label><select name="plan"><option>Mensual</option><option>Trimestral</option><option>Anual</option><option>Cortesía</option></select></div>
+ <div><label>Vencimiento</label><input name="expires_at" type="date" min="${today()}" value="${(()=>{const d=new Date(today()+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+30);return d.toISOString().slice(0,10)})()}" required/></div>
+ <div class="wide"><button class="btn big" type="submit">Crear y activar cuenta</button><p class="help" id="create-client-status" role="status"></p></div>
+ </form><div id="issued-account" class="credentials-once hidden" aria-live="polite"></div>
+ </section>
+ <section class="panel"><div class="charttitle"><div><h2>Clientes registrados</h2><p class="help">Solo tú creas las cuentas, entregas las credenciales y decides quién puede entrar.</p></div><span class="tag">${totals.users} cuenta(s)</span></div>${list||'<div class="empty">Todavía no hay clientes. Los clientes que crees aparecerán aquí.</div>'}</section>
  <section class="panel"><h2>Privacidad</h2><p class="help">Este panel muestra correos, planes y accesos; no permite consultar kilómetros, ganancias, gastos, préstamos ni grifos ajenos.</p></section>`;
 }
 function wireAdmin(){
+ addAdminCreateActions();
  const reload=$('#admin-reload');if(reload)reload.onclick=refresh;
  document.querySelectorAll('.customer-line').forEach(form=>{
   form.querySelectorAll('[data-duration]').forEach(btn=>btn.onclick=()=>{
@@ -375,12 +392,48 @@ function wireAdmin(){
   };
  });
 }
+function addAdminCreateActions(){
+ const form=$('#create-client-form');
+ if(form)form.onsubmit=async e=>{
+  e.preventDefault();const values=Object.fromEntries(new FormData(form)),btn=form.querySelector('[type=submit]'),status=$('#create-client-status');
+  if(!values.email||!values.name||!values.expires_at||values.expires_at<today()){status.textContent='Completa correo, nombre y fecha de vencimiento.';return}
+  btn.disabled=true;status.textContent='Creando cuenta...';
+  try{
+   const {data,error}=await sb.functions.invoke('manage-clients',{body:{action:'create',email:values.email,name:values.name,plan:values.plan,expires_at:values.expires_at}});
+   if(error){let msg=error.message;try{msg=(await error.context.json()).error||msg}catch{}throw Error(msg)}
+   if(!data?.ok||!data.temporary_password)throw Error(data?.error||'No se recibió la contraseña temporal.');
+   await refresh();showIssuedAccess(data.email,data.temporary_password,'Cuenta creada. Entrega estos datos al cliente:');
+  }catch(err){status.textContent=String(err.message||err)}finally{btn.disabled=false}
+ };
+ document.querySelectorAll('[data-password-reset]').forEach(btn=>btn.onclick=async()=>{
+   const id=btn.dataset.passwordReset,client=customerList.find(c=>c.user_id===id);
+   if(!client||!confirm(`¿Generar nueva contraseña para ${client.email}? La anterior dejará de funcionar.`))return;
+   btn.disabled=true;
+   try{
+    const {data,error}=await sb.functions.invoke('manage-clients',{body:{action:'reset',user_id:id}});
+    if(error){let msg=error.message;try{msg=(await error.context.json()).error||msg}catch{}throw Error(msg)}
+    if(!data?.ok||!data.temporary_password)throw Error(data?.error||'No se recibió la clave.');
+    await refresh();showIssuedAccess(data.email,data.temporary_password,'Nueva contraseña temporal:');
+   }catch(err){alert(String(err.message||err))}finally{btn.disabled=false}
+ });
+}
+function showIssuedAccess(email,password,heading){
+ const box=$('#issued-account');if(!box)return;
+ box.innerHTML=`<strong>${esc(heading)}</strong>
+ <p>Correo: <b>${esc(email)}</b></p><p>Contraseña temporal: <code>${esc(password)}</code></p>
+ <p class="help">Copia estas credenciales ahora. No quedarán guardadas en este panel. El conductor tendrá que cambiar la contraseña al ingresar.</p>
+ <div class="actions"><button class="btn" id="copy-issued" type="button">Copiar acceso</button><button class="btn secondary" id="close-issued" type="button">Cerrar</button></div>`;
+ box.classList.remove('hidden');
+ $('#copy-issued').onclick=async()=>{try{await navigator.clipboard.writeText(`Mi Ruta PRO\nhttps://mi-ruta-pro.vercel.app\nUsuario: ${email}\nContraseña temporal: ${password}`);$('#copy-issued').textContent='Copiado'}catch{alert('Selecciona los datos en pantalla para copiarlos.')}};
+ $('#close-issued').onclick=()=>{box.innerHTML='';box.classList.add('hidden')};
+}
 function render(){
  if(!user){loginView();return}
  if(isAdmin&&page==='administracion'){
   shell();$('#content').innerHTML=adminView();if(dataError)$('#db-warning').innerHTML='<div class="notice">'+esc(dataError)+'</div>';wireAdmin();return;
  }
  if(!isAdmin&&!accountEnabled(myLicense)){subscriptionView();return}
+ if(!isAdmin&&myLicense?.must_change_password){changePasswordView();return}
  if(!demo&&!db.vehicles.length){onboardingView();return}
  shell();
  if(dataError)$('#db-warning').innerHTML=`<div class="notice">${esc(dataError)}</div>`;
