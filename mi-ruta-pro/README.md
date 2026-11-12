@@ -1,39 +1,36 @@
-# Mi Ruta PRO — Web independiente
+# Mi Ruta PRO Intelligence · cierre diario + grifos GLP (versión de prueba)
 
-Versión base para migración desde el libro de trabajo **Mi_Ruta_PRO_V4_Combustible_Metas_Colaborativo.xlsx**. No modifica el archivo original ni FHERDANI PRO.
+Migración gradual desde el archivo V4 de Mi Ruta PRO. La app conserva los módulos de odómetro, jornadas, movimientos, metas, mantenimiento y combustible. **No modifica FHERDANI PRO**.
 
-## Activación
-1. Crear un proyecto **Supabase propio** de Mi Ruta PRO (distinto de FHERDANI).
-2. Ejecutar `schema.sql` en ese nuevo proyecto.
-3. Activar Email/Password en Supabase Auth y confirmar el correo, según preferencia.
-4. Completar `config.js` con la **URL del proyecto** y la **clave pública/anon publishable**. Nunca usar secret key/service_role en cliente.
-5. Publicar estos archivos en un proyecto Vercel, framework `Other`, directorio raíz. En Vercel solo se alojan archivos de interfaz; los datos se guardan en Supabase.
-6. Probar dos cuentas de correo diferentes: cada una debe ver solo sus vehículos, ingresos, jornadas, combustibles y metas. Verificar CRUD y RLS de ambas cuentas antes de vender.
+## Lo nuevo
 
-## Funciones incorporadas
-- Inicio de sesión/registro independiente por correo, RLS para cada tabla.
-- Vehículo y odómetro inicial, jornadas, separación trabajo/personal.
-- Movimientos diferenciados: ingreso, gasto operativo, gasto personal, recarga a billetera de app.
-- Control combustible GLP/Gasolina/GNV y rendimiento entre llenados completos.
-- Metas y proyecciones, mantenimiento y alertas por odómetro.
-- Nuevo análisis lunes-domingo: promedio neto por jornada, total neto, ingresos, costos, número de jornadas, período 7/30/90 días/todo.
-- Exportación privada JSON y diseño responsive.
+1. **Cerrar mi día:** un formulario con fecha, odómetro, km de trabajo e ingresos del día. Los gastos son opcionales y se agregan en el mismo cierre. No pide datos cada hora.
+2. **Combustible / grifo:** en cualquier carga se registra fecha, nombre del grifo, tipo (GLP/gasolina/GNV), lectura de odómetro, importe, litros/m³ y tanque lleno o parcial. Se recuerdan los nombres ya usados.
+3. **Rendimiento del GLP por grifo:** cálculo entre tanques llenos. Solo se comparan ciclos con uso exclusivo confirmado del mismo combustible y sin mezcla de grifos en las recargas parciales intermedias. El ciclo se atribuye al grifo del llenado **inicial**, no al del cierre; la recarga del final estima lo consumido. Para recomendar un grifo se requieren **3 ciclos válidos por grifo y al menos 2 grifos comparables**. La ruta, el clima, la calibración del surtidor y el tráfico influyen: no es prueba de calidad del producto.
+4. **Intelligence diario:** lunes a domingo por promedio de saldo neto operativo por *jornada* y saldo/km trabajado. Solo cuenta fechas con jornadas; sin jornada no equivale a cero. Nunca pide ingresos por horas. A partir de tres cierres por día de la semana emite una recomendación prudente.
+5. **Demostración:** botón «Ver demostración» en acceso para conocer la interfaz sin base de datos. Los datos son **ficticios** y se pierden al salir o recargar.
 
-## Reglas conservadas
-- Las recargas de aplicaciones de movilidad son transferencias, no costos.
-- Los gastos personales afectan flujo de caja, no utilidad operativa.
-- El combustible pagado se contabiliza una sola vez como costo al abastecer, no duplicar en Movimientos.
-- Las jornadas deben registrarse en orden temporal y respetar lecturas sucesivas del odómetro.
-- Los ciclos de rendimiento usan únicamente llenados completos del mismo combustible.
-- No calcular proyecciones de metas con menos de 3 jornadas reales.
-- No inventar resultados históricos.
+## Activación de usuarios reales
 
-## Límites de esta versión
-La migración ha sido contrastada con las reglas y categorías del XLSX V4 conservado, pero faltan el código original de Apps Script y pruebas de equivalencia detalladas. Por tanto, esta entrega aún NO puede presentarse como clon exacto o migración de datos completa. El análisis de días usa importes por fecha de pago; no prorratea automáticamente combustible consumido, que puede diferir del pagado. Para uso público, completar pruebas de autenticación/RLS, validación de odómetro y recorridos y auditoría de seguridad antes de producción.
+1. Crear Supabase nuevo **exclusivo de Mi Ruta PRO**, separado de FHERDANI PRO. Requiere confirmar cualquier costo aplicable. Si se crea uno nuevo, ejecutar `schema.sql` una sola vez. Si ya existía uno con tablas V1, ejecutar únicamente `migration_v2.sql`.
+2. Activar Supabase Auth correo/contraseña y confirmación de correo.
+3. En `config.js` completar la URL y **clave pública** (`publishable` o legacy `anon`). Nunca escribir `service_role`, tokens privados ni contraseñas en GitHub.
+4. Vercel: conectar repositorio `gianloamar-crypto/gflm-systems`, **Root Directory `mi-ruta-pro`**, framework Other. El código es HTML/JS estático: no requiere paquetes npm para desplegar. Los datos se guardan en Supabase con políticas RLS por usuario.
+5. Probar dos cuentas, la función SQL `save_day_close`, borrados, valores de odómetro, cierres de jornada duplicados y acceso cruzado denegado ANTES de permitir clientes reales.
 
-## Repositorio GitHub y Vercel
-El código puede alojarse en la subcarpeta `mi-ruta-pro/` del repositorio `gflm-systems` sin modificar sus otros archivos.
-En Vercel configura **Root Directory**: `mi-ruta-pro` y selecciona el framework **Other** para servir archivos estáticos.
+## Reglas importantes
 
-## Estado de seguridad y publicación
-Sin un proyecto Supabase propio y las credenciales públicas en `config.js`, el formulario de acceso permanece intencionalmente deshabilitado. La interfaz no guarda datos reales en el navegador. No reutilizar la base de datos ni las credenciales de FHERDANI PRO.
+- **El odómetro** es la referencia para calcular kilómetros; no inventar lecturas.
+- Combustible pagado no equivale necesariamente a consumo de combustible del mismo día.
+- Combustible de `fuel` no se duplica en gastos operativos de `movements`.
+- Recarga del saldo de la app es transferencia, nunca comisión.
+- Gastos personales afectan el flujo, no el saldo operativo.
+- Proyecciones de metas requieren al menos tres jornadas.
+- Los cierres rápidos se guardan con una operación de base de datos **atómica** mediante `public.save_day_close()`; fallar una operación impide que se guarden las demás.
+- Se necesita recuperar y comparar el código de Apps Script original para asegurar equivalencia total con V4.
+
+## Verificación local
+
+Con Node.js 18+: `node --test tests/analytics.test.mjs`. Sin Node, la web se puede abrir con un servidor estático; `app.js` usa ES modules.
+
+**Estado:** versión de prueba. La URL desplegada puede mostrar una demostración sin cuenta. La autenticación real no está activada hasta disponer de un Supabase aislado y ejecutar SQL. No se han migrado historiales privados de V4.
