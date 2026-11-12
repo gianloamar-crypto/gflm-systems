@@ -73,3 +73,11 @@ on conflict (user_id) do nothing;
 ```
 
 No habilitar una cuenta de propietario sin verificar primero que el correo le pertenezca. La web no puede otorgarse administradores a sí misma.
+
+## V6 — Propietario y panel comercial
+
+- El propietario se asigna de manera controlada en Supabase, sin acceso público para crear administradores.
+- El propietario puede usar el sistema sin vencimiento propio; los clientes sí requieren estado activo y fecha vigente.
+- La cuenta propietaria no aparece en la cola de clientes pendientes.
+- Para actualizar desde V5, aplicar `migration_v6_owner_access.sql`. Para instalaciones nuevas, `schema.sql` incluye la política más reciente.
+- Confirmar el correo antes de usar la cuenta. No compartir claves privadas ni contraseñas.
