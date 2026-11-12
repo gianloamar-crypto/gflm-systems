@@ -180,4 +180,42 @@ tbody tr:hover{background:#FCF7F1}
 .customer-quick [data-password-reset]{margin-left:5px}
 @media(max-width:690px){.create-client-panel .fields{grid-template-columns:1fr}.customer-quick [data-password-reset]{margin-left:0}}
 
+
+/* V8 · Panel de uso comercial con la paleta cálida de Mi Ruta PRO */
+.usage-overview{border-color:#DFCBBB;background:#FFFCF8}
+.usage-overview .charttitle{align-items:flex-start;flex-wrap:wrap}
+.usage-overview .charttitle>.actions{align-items:center}
+.usage-overview select{width:auto;min-width:110px}
+.usage-cards{grid-template-columns:repeat(4,minmax(0,1fr))}
+.usage-cards .card{background:#FAF4EE}
+.live-dot{display:inline-flex;align-items:center;gap:5px;border-radius:100px;font-size:11px;font-weight:700;padding:5px 9px}
+.live-dot.online{color:#376D50;background:#EAF4EC;border:1px solid #C8DFC9}
+.live-dot.offline{color:#7D7369;background:#F1ECE5;border:1px solid #E6DCD0}
+.client-usage{margin-top:15px;padding:14px;border-radius:13px;border:1px solid #E8D8C8;background:#FFFCF8;min-width:0}
+.client-usage>summary{cursor:pointer;color:#7E4A36;font-weight:750;display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
+.client-usage>summary .help{font-weight:500}
+.client-usage[open]>summary{padding-bottom:15px}
+.client-usage h3{font-size:13px;margin:19px 0 8px;color:#594D43}
+.client-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.client-metric{background:#F7F0E8;padding:11px;border-radius:10px;min-width:0}
+.client-metric small{display:block;font-size:11px;color:#75695F;margin-bottom:6px}
+.client-metric strong{font-size:16px;color:#4C4138;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.activity-chart{height:158px;display:flex;align-items:end;gap:12px;padding:12px 8px 0;border-bottom:1px solid #EADDD0}
+.activity-column{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;flex:1;gap:5px;min-width:0}
+.activity-bar-track{width:100%;max-width:46px;height:110px;border-radius:7px 7px 0 0;display:flex;align-items:flex-end;background:#F2E6DB;overflow:hidden}
+.activity-bar{width:100%;border-radius:7px 7px 0 0;background:linear-gradient(180deg,#C18C70,#A96147);min-height:0;transition:height .2s ease}
+.activity-value,.activity-day{font-size:11px;color:#76685E}
+.module-usage{display:flex;flex-wrap:wrap;gap:7px}
+@media(max-width:1050px){.client-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:690px){
+ .usage-cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .usage-overview .charttitle>.actions{width:100%;flex-wrap:wrap}
+ .usage-overview .charttitle>.actions button{flex:1}
+ .client-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .activity-chart{gap:6px}
+ .client-usage{padding:12px}
+ .customer-identity{gap:6px}
+ .client-usage>summary .help{font-size:11px}
+}
+
 </style></head><body><div id="root"></div><script type="module" src="app.js"></script></body></html>

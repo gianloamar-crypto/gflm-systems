@@ -88,3 +88,15 @@ No habilitar una cuenta de propietario sin verificar primero que el correo le pe
 - Primer acceso: cambio de contraseña obligatorio; trigger protegido `customer_password_updated` elimina el requisito tras cambiarla.
 - La clave privada de administración permanece en Supabase Edge Functions.
 - Para impedir incluso el registro directo por API, en Supabase Dashboard → Authentication → Providers, desactivar **Allow new users to sign up**. No hay herramienta conectada para cambiar ese ajuste desde esta conversación.
+
+## V8/V9 — Panel de uso y presencia de clientes (noviembre de 2026)
+
+El propietario mantiene la creación y control de cuentas: correo, plan, contraseña temporal generada de forma segura, cambio obligatorio de contraseña, fechas y suspensiones. **No se cambió ese flujo**.
+
+- «En línea» es una estimación basada en los últimos **120 segundos** y una pestaña visible; no es una garantía de conexión instantánea. Se actualiza visualmente aproximadamente cada 45 segundos.
+- La actividad por cliente muestra últimos accesos, aperturas, visitas a módulos, días activos, cierres de jornada, recargas, otros registros y minutos aproximados de uso activo. El reporte permite 7/30/90 días y exportación CSV.
+- Los minutos se acumulan en Supabase con un pulso mientras la web está visible (intervalo de 45 s, brechas limitadas a 60 s); pestañas suspendidas o sin visibilidad no se cuentan indefinidamente. Son métricas aproximadas, no un registro laboral de horas.
+- La bitácora solo almacena nombre del módulo y tipo de operación; los eventos de registros reales se generan mediante triggers de la base de datos, sin copiar importes, saldos, ubicaciones, datos del préstamo ni datos de viajes.
+- Las tablas `customer_presence`, `customer_activity` y `customer_usage_daily` tienen RLS y acceso solo a propietario; nadie tiene escritura directa desde el navegador (la web usa funciones con identidad verificada).
+- La trazabilidad inicia **desde esta actualización**; no se reconstruye artificialmente el historial anterior. Las métricas no son base de facturación automatizada.
+- Migraciones sobre Supabase exclusivo de Mi Ruta PRO: `migration_v8_activity_reports.sql` y `migration_v9_active_minutes.sql`.
