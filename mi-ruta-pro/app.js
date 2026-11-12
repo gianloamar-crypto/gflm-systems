@@ -2,29 +2,54 @@ import {SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY} from './config.js';
 import {weekdayReport, fuelCycles, stationRanking} from './analytics.mjs';
 import {debtStatus, validateDebtAction} from './debts.mjs';
 const ready=Boolean(SUPABASE_URL&&SUPABASE_PUBLISHABLE_KEY);const currency=n=>'S/ '+Number(n||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2});const fmt=n=>Number(n||0).toLocaleString('es-PE',{maximumFractionDigits:2});const today=()=>new Date().toLocaleDateString('en-CA',{timeZone:'America/Lima'});const $=s=>document.querySelector(s);const root=$('#root');
-let sb=null,user=null,demo=false,signupMode=false,db={profiles:[],vehicles:[],shifts:[],movements:[],fuel:[],goals:[],maintenance:[],debts:[],debt_actions:[]},page='inicio',range='30';
+let sb=null,user=null,demo=false,signupMode=false,isAdmin=false,myLicense=null,customerList=[],db={profiles:[],vehicles:[],shifts:[],movements:[],fuel:[],goals:[],maintenance:[],debts:[],debt_actions:[]},page='inicio',range='30';
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const toNum=v=>Math.round((Number(v)||0)*100)/100;
 const dateStr=s=>String(s||'').slice(0,10);
 function filterDate(d){let days=Number(range);if(!days)return true;let delta=(new Date(today()+'T12:00:00')-new Date(dateStr(d)+'T12:00:00'))/86400000;return delta>=0&&delta<days}
 function account(){return db.profiles[0]?.display_name||user?.email||'Usuario'}
+function accountEnabled(a){return a?.status==='active'&&String(a.expires_at||'')>=today()}
+function accountState(a){if(!a||a.status==='pending')return 'Pendiente';if(a.status==='suspended')return 'Suspendida';if(a.status==='active'&&!accountEnabled(a))return 'Vencida';return 'Activa'}
+function freshDb(){return {profiles:[],vehicles:[],shifts:[],movements:[],fuel:[],goals:[],maintenance:[],debts:[],debt_actions:[]}}
 async function init(){if(ready){try{const {createClient}=await import('https://esm.sh/@supabase/supabase-js@2.57.4');sb=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true}});const {data}=await sb.auth.getUser();user=data.user;sb.auth.onAuthStateChange((_evt,session)=>{const id=session?.user?.id;if(id!==user?.id){user=session?.user||null;setTimeout(()=>refresh(),0)}})}catch(e){root.innerHTML='<div class="auth">No se pudo iniciar la conexión: '+esc(e.message)+'</div>';return}}await refresh()}
 let dataError='';
-async function refresh(){if(user&&sb&&!demo){dataError='';const tables=Object.keys(db);const results=await Promise.all(tables.map(t=>sb.from(t).select('*').eq('user_id',user.id).order('created_at',{ascending:false})));results.forEach((r,i)=>{if(r.error){console.error(tables[i],r.error.message);db[tables[i]]=[];if(['debts','debt_actions'].includes(tables[i]))dataError='La sección Pagos necesita ejecutar migration_v3.sql en el proyecto exclusivo Mi Ruta PRO.';}else db[tables[i]]=r.data||[]})}render()}
+async function refresh(){
+ if(user&&sb&&!demo){
+  dataError='';
+  const [roleResult,licenseResult]=await Promise.all([
+   sb.from('app_admins').select('user_id').eq('user_id',user.id).maybeSingle(),
+   sb.from('customer_accounts').select('user_id,email,status,plan,expires_at,created_at').eq('user_id',user.id).maybeSingle()
+  ]);
+  if(roleResult.error){console.error(roleResult.error.message);dataError='No se pudo verificar tu rol.'}
+  if(licenseResult.error){console.error(licenseResult.error.message);dataError='No se pudo comprobar el acceso.'}
+  isAdmin=!!roleResult.data?.user_id;myLicense=licenseResult.data||null;
+  if(isAdmin){
+    const listing=await sb.from('customer_accounts').select('user_id,email,status,plan,expires_at,created_at').order('created_at',{ascending:false});
+    if(listing.error){console.error(listing.error.message);dataError='No se pudo consultar clientes.';customerList=[]}
+    else customerList=listing.data||[];
+  }else customerList=[];
+  if(accountEnabled(myLicense)){
+    const tables=Object.keys(db);
+    const results=await Promise.all(tables.map(t=>sb.from(t).select('*').eq('user_id',user.id).order('created_at',{ascending:false})));
+    results.forEach((r,i)=>{if(r.error){console.error(tables[i],r.error.message);db[tables[i]]=[];dataError='Algunos datos no se pudieron cargar.';}else db[tables[i]]=r.data||[]});
+  }else {db=freshDb();if(isAdmin)page='administracion';}
+ }else{isAdmin=false;myLicense=null;customerList=[];db=freshDb();}
+ render();
+}
 function loginView(){
   root.innerHTML=`<main class="auth auth-refresh">
     <div class="brand">🚘 Mi Ruta <b>PRO</b></div>
     <div class="step-indicator">TU NUEVA RUTA EMPIEZA AQUÍ</div>
     <h1>${signupMode?'Crea tu cuenta':'Bienvenido de nuevo'}</h1>
-    <p class="muted">${signupMode?'Tus datos serán privados. Al entrar, configurarás tu vehículo y tu saldo inicial.':'Ingresa para consultar tus jornadas, combustible, grifos y pagos.'}</p>
+    <p class="muted">${signupMode?'Solicita tu cuenta. El propietario revisará tu solicitud y autorizará el acceso.':'Ingresa para consultar tus jornadas, combustible, grifos y pagos.'}</p>
     ${!ready?'<div class="notice">La conexión con la base de datos no está disponible.</div>':''}
     <form id="authform" autocomplete="on">
       <label for="auth-email">Correo electrónico</label><input id="auth-email" name="email" type="email" autocomplete="email" maxlength="250" required />
       <label for="auth-password">Contraseña ${signupMode?'· mínimo 8 caracteres':''}</label><input id="auth-password" name="password" type="password" minlength="${signupMode?8:6}" autocomplete="${signupMode?'new-password':'current-password'}" required />
       ${signupMode?'<label for="auth-confirm">Confirmar contraseña</label><input id="auth-confirm" name="confirm_password" type="password" minlength="8" autocomplete="new-password" required />':''}
-      <div class="auth-controls"><button class="btn big" type="submit" ${!ready?'disabled':''}>${signupMode?'Crear mi cuenta':'Iniciar sesión'}</button>
+      <div class="auth-controls"><button class="btn big" type="submit" ${!ready?'disabled':''}>${signupMode?'Solicitar cuenta':'Iniciar sesión'}</button>
       <button class="btn secondary" id="toggle-mode" type="button">${signupMode?'Ya tengo cuenta':'Crear cuenta nueva'}</button></div>
-      <p class="help" id="authstatus" role="status" aria-live="polite">${signupMode?'Si se solicita confirmación, revisa tu correo antes de ingresar.':'¿Primera vez? Crea tu cuenta y configura tu punto de partida.'}</p>
+      <p class="help" id="authstatus" role="status" aria-live="polite">${signupMode?'Confirma tu correo si se solicita. Después, espera la aprobación del propietario.':'¿Primera vez? Solicita tu cuenta y espera la activación.'}</p>
     </form>
     <p class="auth-footnote">Cada conductor utiliza su propia cuenta. No hay datos de demostración ni ingresos precargados.</p>
   </main>`;
@@ -41,7 +66,7 @@ function loginView(){
         const {data,error}=await sb.auth.signUp({email,password,options:{emailRedirectTo:location.origin+location.pathname}});
         if(error)throw error;
         if(data?.session?.user){user=data.session.user;signupMode=false;await refresh()}
-        else{status.textContent='Solicitud enviada. Comprueba tu correo y confirma la cuenta antes de iniciar sesión. Después configura tu punto de partida.';el.querySelector('[name=password]').value='';el.querySelector('[name=confirm_password]').value=''}
+        else{status.textContent='Solicitud registrada. Confirma el correo si se solicita y espera la aprobación del propietario.';el.querySelector('[name=password]').value='';el.querySelector('[name=confirm_password]').value=''}
       }else{
         const {data,error}=await sb.auth.signInWithPassword({email,password});
         if(error)throw error;
@@ -54,7 +79,7 @@ function loginView(){
   };
 }
 const pages=[['inicio','▦','Inicio'],['cierre','✓','Cierre rápido'],['jornadas','🚘','Jornadas'],['movimientos','💳','Movimientos'],['combustible','⛽','Combustible'],['analisis','📊','Análisis de días'],['metas','🎯','Metas'],['pagos','💰','Préstamos y pagos'],['mantenimiento','🔧','Mantenimiento'],['configuracion','⚙️','Mi vehículo']];
-function shell(){root.innerHTML=`<div class="layout"><aside class="sidebar"><div class="brand">🚘 Mi Ruta <b>PRO</b></div>${pages.map(([p,ico,label])=>`<button data-page="${p}" class="menu ${page===p?'active':''}">${ico} ${label}</button>`).join('')}</aside><main class="main"><header class="top"><div><h1 id="heading">${esc(pages.find(x=>x[0]===page)?.[2])}</h1><p class="muted">${demo?'🧪 Modo demostración · Datos ficticios, no se guardan':'🔒 '+esc(account())+' · Datos privados de tu cuenta'}</p></div><div class="actions"><select id="range" aria-label="Período"><option value="7">7 días</option><option value="30">30 días</option><option value="90">90 días</option><option value="0">Todo</option></select><button id="signout" class="btn secondary">Salir</button></div></header><div id="db-warning"></div><div id="content"></div><footer class="foot">Mi Ruta PRO · GFLM Systems · Tu control, tu ganancia</footer></main></div>`;$('#range').value=range;$('#range').onchange=e=>{range=e.target.value;render()};$('#signout').onclick=async()=>{if(demo){demo=false;user=null;db={profiles:[],vehicles:[],shifts:[],movements:[],fuel:[],goals:[],maintenance:[],debts:[],debt_actions:[]}}else await sb.auth.signOut();user=null;render()};document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>{page=b.dataset.page;render()})}
+function shell(){root.innerHTML=`<div class="layout"><aside class="sidebar"><div class="brand">🚘 Mi Ruta <b>PRO</b></div>${(isAdmin?[...pages,['administracion','👑','Mis clientes']]:pages).map(([p,ico,label])=>`<button data-page="${p}" class="menu ${page===p?'active':''}">${ico} ${label}</button>`).join('')}</aside><main class="main"><header class="top"><div><h1 id="heading">${esc(pages.find(x=>x[0]===page)?.[2]||(page==='administracion'?'Mis clientes':'Inicio'))}</h1><p class="muted">${demo?'🧪 Modo demostración · Datos ficticios, no se guardan':'🔒 '+esc(account())+' · Datos privados de tu cuenta'}</p></div><div class="actions"><select id="range" aria-label="Período"><option value="7">7 días</option><option value="30">30 días</option><option value="90">90 días</option><option value="0">Todo</option></select><button id="signout" class="btn secondary">Salir</button></div></header><div id="db-warning"></div><div id="content"></div><footer class="foot">Mi Ruta PRO · GFLM Systems · Tu control, tu ganancia</footer></main></div>`;$('#range').value=range;$('#range').onchange=e=>{range=e.target.value;render()};$('#signout').onclick=async()=>{if(demo){demo=false;user=null;db={profiles:[],vehicles:[],shifts:[],movements:[],fuel:[],goals:[],maintenance:[],debts:[],debt_actions:[]}}else await sb.auth.signOut();user=null;render()};document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>{page=b.dataset.page;render()})}
 const field=(label,name,type='text',extra='')=>`<div><label>${label}</label><input name="${name}" type="${type}" ${extra}/></div>`;
 const sel=(label,name,arr)=>`<div><label>${label}</label><select name="${name}">${arr.map(a=>`<option>${esc(a)}</option>`).join('')}</select></div>`;
 const form=(id,body,button='Guardar')=>`<form id="${id}" class="fields">${body}<div class="wide"><button class="btn" type="submit">${button}</button></div><p class="help wide" id="status"></p></form>`;
@@ -294,8 +319,67 @@ async function saveOnboarding(v){
   if(error)throw Error(error.message);
   page='inicio';await refresh();
 }
+function subscriptionView(){
+ const s=accountState(myLicense);
+ const msg=s==='Pendiente'?'Tu solicitud está registrada. El propietario debe aprobar tu cuenta y asignar un período de uso.':s==='Suspendida'?'El propietario ha suspendido temporalmente tu acceso. Tus datos se conservan.':s==='Vencida'?'Tu período terminó. Solicita una renovación al propietario para continuar.':'Tu cuenta aún no está habilitada.';
+ root.innerHTML=`<main class="auth auth-refresh"><div class="brand">🚘 Mi Ruta <b>PRO</b></div><p class="step-indicator">ACCESO CONTROLADO</p>
+ <h1>${esc(s==='Pendiente'?'Solicitud en revisión':s==='Suspendida'?'Acceso suspendido':s==='Vencida'?'Suscripción vencida':'Cuenta no habilitada')}</h1>
+ <p class="muted">${esc(msg)}</p><div class="notice">${esc(user?.email||'')} · Estado: <b>${esc(s)}</b></div>
+ <div class="actions"><button id="check-access" class="btn" type="button">Comprobar acceso</button>${isAdmin?'<button id="open-admin" class="btn secondary" type="button">Panel del propietario</button>':''}<button id="leave-account" class="btn secondary" type="button">Cerrar sesión</button></div>
+ <p class="help">Las jornadas y pagos ya registrados no se borran al vencer la suscripción.</p></main>`;
+ $('#check-access').onclick=refresh;
+ if($('#open-admin'))$('#open-admin').onclick=()=>{page='administracion';render()};
+ $('#leave-account').onclick=async()=>{await sb.auth.signOut();user=null;await refresh()};
+}
+function adminView(){
+ const totals={users:customerList.length,pending:customerList.filter(x=>x.status==='pending').length,active:customerList.filter(accountEnabled).length,expired:customerList.filter(x=>x.status==='active'&&!accountEnabled(x)).length,suspended:customerList.filter(x=>x.status==='suspended').length};
+ const label=x=>accountState(x);
+ const cards=[['Cuentas',totals.users],['Pendientes',totals.pending],['Activas',totals.active],['Vencidas',totals.expired],['Suspendidas',totals.suspended]];
+ const opts=(choices,selected)=>choices.map(([v,t])=>`<option value="${esc(v)}" ${v===selected?'selected':''}>${esc(t)}</option>`).join('');
+ const list=customerList.map(x=>`<form class="customer-line" data-account="${esc(x.user_id)}">
+  <div class="customer-identity"><strong>${esc(x.email)}</strong><small>Solicitada: ${esc(dateStr(x.created_at))}</small><span class="account-status">${esc(label(x))}</span></div>
+  <div class="customer-controls">
+   <div><label>Estado</label><select name="status">${opts([['pending','Pendiente'],['active','Activo'],['suspended','Suspendido']],x.status)}</select></div>
+   <div><label>Plan</label><select name="plan">${opts([['Mensual','Mensual'],['Trimestral','Trimestral'],['Anual','Anual'],['Cortesía','Cortesía']],x.plan)}</select></div>
+   <div><label>Vence</label><input type="date" name="expires_at" value="${esc(x.expires_at||'')}"/></div>
+   <button type="submit" class="btn">Guardar</button>
+  </div>
+  <div class="customer-quick"><button type="button" class="btn secondary small" data-duration="7">+7 días</button><button type="button" class="btn secondary small" data-duration="30">+30 días</button><button type="button" class="btn secondary small" data-duration="90">+90 días</button><span class="help customer-feedback" role="status"></span></div>
+ </form>`).join('');
+ return `<section class="panel welcome admin-hero"><div><p class="eyebrow">MI RUTA PRO · PROPIETARIO</p><h2>Control de clientes y suscripciones</h2><p>Aprueba solicitudes, define vencimientos y suspende accesos. Los datos financieros de cada conductor siguen privados.</p></div><button class="btn secondary" id="admin-reload" type="button">Actualizar</button></section>
+ <div class="cards admin-stats">${cards.map(([k,v])=>`<div class="card"><small>${k}</small><strong>${v}</strong></div>`).join('')}</div>
+ <section class="panel"><div class="charttitle"><div><h2>Clientes registrados</h2><p class="help">Los clientes solicitan la cuenta; tú decides quién puede usarla. Activar no cobra dinero.</p></div><span class="tag">${totals.users} cuenta(s)</span></div>${list||'<div class="empty">Todavía no hay clientes. Las solicitudes aparecerán aquí.</div>'}</section>
+ <section class="panel"><h2>Privacidad</h2><p class="help">Este panel muestra correos, planes y accesos; no permite consultar kilómetros, ganancias, gastos, préstamos ni grifos ajenos.</p></section>`;
+}
+function wireAdmin(){
+ const reload=$('#admin-reload');if(reload)reload.onclick=refresh;
+ document.querySelectorAll('.customer-line').forEach(form=>{
+  form.querySelectorAll('[data-duration]').forEach(btn=>btn.onclick=()=>{
+    const days=Number(btn.dataset.duration),input=form.querySelector('[name=expires_at]');
+    const base=input.value>=today()?input.value:today();
+    const d=new Date(base+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+days);
+    input.value=d.toISOString().slice(0,10);form.querySelector('[name=status]').value='active';
+  });
+  form.onsubmit=async e=>{
+    e.preventDefault();
+    const v=Object.fromEntries(new FormData(form)),status=form.querySelector('.customer-feedback'),btn=form.querySelector('[type=submit]');
+    if(v.status==='active'&&(!v.expires_at||v.expires_at<today())){status.textContent='Indica una fecha de vencimiento válida.';return}
+    if(!confirm('¿Guardar el acceso de este cliente?'))return;
+    btn.disabled=true;status.textContent='Guardando...';
+    try{
+      const {data,error}=await sb.from('customer_accounts').update({status:v.status,plan:v.plan,expires_at:v.expires_at||null,updated_at:new Date().toISOString()}).eq('user_id',form.dataset.account).select('user_id').single();
+      if(error)throw error;if(!data?.user_id)throw Error('No se confirmó el cambio.');
+      await refresh();
+    }catch(err){status.textContent=String(err.message||err)}finally{btn.disabled=false}
+  };
+ });
+}
 function render(){
  if(!user){loginView();return}
+ if(isAdmin&&page==='administracion'){
+  shell();$('#content').innerHTML=adminView();if(dataError)$('#db-warning').innerHTML='<div class="notice">'+esc(dataError)+'</div>';wireAdmin();return;
+ }
+ if(!accountEnabled(myLicense)){subscriptionView();return}
  if(!demo&&!db.vehicles.length){onboardingView();return}
  shell();
  if(dataError)$('#db-warning').innerHTML=`<div class="notice">${esc(dataError)}</div>`;
@@ -339,4 +423,5 @@ async function saveCar(v){
   const {error}=await sb.from('vehicles').update(payload).eq('id',current.id).eq('user_id',user.id);
   if(error)throw error;
 }
+window.addEventListener('focus',()=>{if(user&&sb)refresh()});
 init();

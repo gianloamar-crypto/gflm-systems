@@ -55,3 +55,21 @@ Con Node.js 18+: `node --test tests/analytics.test.mjs`. Sin Node, la web se pue
 - El formulario usa `initialize_driver` para crear perfil y vehículo de forma atómica, respetando RLS. Los saldos iniciales son referencias y **nunca** ingresos ni gastos operativos.
 - Antes de usar la aplicación real: en Supabase Authentication → URL Configuration, configurar Site URL `https://mi-ruta-pro.vercel.app` y Redirect URLs autorizadas. No compartir contraseñas en ChatGPT ni almacenarlas en GitHub.
 - Si el proyecto ya está en V3, ejecutar únicamente `migration_v4.sql`; para instalación desde cero, el archivo `schema.sql` actualizado contiene todas las migraciones.
+
+## V5 — Comercialización y control del propietario
+- El registro solo envía una **solicitud de acceso**. Nadie puede trabajar hasta que el propietario lo active.
+- Panel «Mis clientes» exclusivo para rol autorizado en `app_admins` (no por metadatos editables).
+- Estados: pendiente, activo y suspendido; activo con fecha vencida se muestra «Vencido».
+- El propietario controla plan y vencimiento; **no se procesan pagos en línea** ni se visualizan finanzas de clientes.
+- La autorización se aplica también en políticas RLS de las tablas, no solo en la interfaz.
+- Para establecer el primer propietario, crea una cuenta con tu correo, confirma el correo, y después ejecuta en el SQL Editor (con permisos de propietario de la base):
+
+```sql
+insert into public.app_admins (user_id)
+select id from auth.users
+where lower(email) = lower('CORREO_DEL_PROPIETARIO')
+  and email_confirmed_at is not null
+on conflict (user_id) do nothing;
+```
+
+No habilitar una cuenta de propietario sin verificar primero que el correo le pertenezca. La web no puede otorgarse administradores a sí misma.
