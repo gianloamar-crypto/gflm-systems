@@ -26,7 +26,7 @@ async function refresh(){
   if(isAdmin){
     const listing=await sb.from('customer_accounts').select('user_id,email,status,plan,expires_at,created_at').order('created_at',{ascending:false});
     if(listing.error){console.error(listing.error.message);dataError='No se pudo consultar clientes.';customerList=[]}
-    else customerList=listing.data||[];
+    else customerList=(listing.data||[]).filter(a=>a.user_id!==user.id);
   }else customerList=[];
   if(isAdmin||accountEnabled(myLicense)){
     const tables=Object.keys(db);
