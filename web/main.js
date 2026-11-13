@@ -124,6 +124,33 @@ function ensureValid(k,row,id){
  if(k==="almacen"){if(num(row.cantidad)<=0)throw Error("La cantidad debe ser mayor a cero");const inv=inventory(id,row);for(const pair of inv){if(pair[1]<-0.00001)throw Error("Stock negativo de "+pair[0].split("\u001f")[1]+". Disponible insuficiente.");}}
  if(k==="tareos"){if(num(row.horas)>24)throw Error("Las horas no pueden exceder 24");if(getRows("tareos").some(function(r){return Number(r.id)!==Number(id)&&r.fecha===row.fecha&&r.obra===row.obra&&String(r.trabajador)===String(row.trabajador);}))throw Error("Ya existe un tareo de ese trabajador en la misma obra y fecha");}
  if(k==="compras"){if(num(row.total)<=0)throw Error("La compra debe ser mayor a cero");if(row.tipo==="Nota de venta"&&num(row.igv)>0)throw Error("La nota de venta no lleva IGV separado");if(row.tipo==="Factura"&&(num(row.valor_venta)>0||num(row.igv)>0)&&Math.abs(num(row.valor_venta)+num(row.igv)-num(row.total))>.05)throw Error("Valor de venta + IGV debe coincidir con el total");if(row.tipo==="Factura pendiente"&&!row.vencimiento){const d=new Date(row.fecha+"T12:00:00");d.setDate(d.getDate()+5);row.vencimiento=d.toISOString().slice(0,10);}}
+ if(k==="caja"){
+   if(row.tipo==="Reembolso a mí"){
+     const mine=getRows("caja").filter(x=>x.tipo==="Gasto"&&x.cuenta==="Dinero propio"&&x.obra===row.obra).reduce((t,x)=>t+num(x.monto),0);
+     const repaid=getRows("caja").filter(x=>x.tipo==="Reembolso a mí"&&x.obra===row.obra&&Number(x.id)!==Number(id)).reduce((t,x)=>t+num(x.monto),0);
+     if(repaid+num(row.monto)>mine+0.015)throw Error("El reembolso supera los gastos propios pendientes de esta obra");
+   }
+   if(row.tipo==="Gasto"&&row.compra_id){
+     const source=getRows("compras").find(x=>Number(x.id)===Number(row.compra_id));
+     if(source&&source.obra!==row.obra)throw Error("La compra y el gasto deben pertenecer a la misma obra");
+   }
+ }
+ if(k==="compras"){
+   const pagos=getRows("caja").filter(x=>x.tipo==="Gasto"&&Number(x.compra_id)===Number(id)).reduce((t,x)=>t+num(x.monto),0);
+   if(pagos>num(row.total)+.015)throw Error("El total de compra no puede ser menor a los pagos registrados");
+   if(["Factura","Boleta"].includes(row.tipo)&&String(row.serie_numero||"").trim()){
+     const dup=getRows("compras").some(x=>Number(x.id)!==Number(id)&&x.tipo===row.tipo&&String(x.serie_numero||"").trim().toUpperCase()===row.serie_numero.trim().toUpperCase()&&(String(x.ruc||"").trim()&&x.ruc===row.ruc||String(x.proveedor||"").trim().toLowerCase()===String(row.proveedor||"").trim().toLowerCase()));
+     if(dup)throw Error("Ese comprobante ya figura registrado para el mismo proveedor");
+   }
+ }
+ if(k==="personal"&&row.documento&&getRows("personal").some(x=>Number(x.id)!==Number(id)&&x.documento===row.documento))throw Error("Ya existe una ficha de personal con ese documento");
+ if(k==="obras"&&id){
+   const original=getRows("obras").find(x=>Number(x.id)===Number(id));
+   if(original&&original.nombre!==row.nombre){
+     const linked=Object.keys(M).some(key=>key!=="obras"&&getRows(key).some(x=>x.obra===original.nombre));
+     if(linked)throw Error("Esta obra ya tiene registros vinculados. No cambies su nombre; edita otros datos.");
+   }
+ }
  if(k==="planillas"){if(row.periodo_inicio>row.periodo_fin)throw Error("El periodo es inválido");if(Math.abs(num(row.basico)+num(row.extras)-num(row.descuentos)-num(row.neto))>.05)throw Error("El neto debe ser básico + extras - descuentos");}
  if(k==="alquileres"&&row.fin&&row.inicio>row.fin)throw Error("La fecha fin es anterior al inicio");
  if(k==="custodia"){if(num(row.cantidad)<=0)throw Error("La cantidad del acta debe ser mayor a cero");if(num(row.faltante)>num(row.cantidad))throw Error("El faltante excede lo entregado");}
