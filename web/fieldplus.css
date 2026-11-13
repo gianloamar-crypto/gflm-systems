@@ -75,3 +75,34 @@
 .field-whatsapp-enhance>small{display:block;color:#a0b99d;margin-top:10px;font-size:10px}
 @media(max-width:1050px){.field-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.field-two{grid-template-columns:1fr}.field-report-balance{grid-template-columns:1fr}.field-report-mini{border-left:0;border-top:1px solid #856c42;padding:17px 0 0}.field-protection{grid-template-columns:1fr}}
 @media(max-width:650px){.field-heading{align-items:flex-start}.field-heading-mark{display:none}.field-heading h1{font-size:31px}.field-toolbar{display:grid;grid-template-columns:1fr 1fr}.field-toolbar label:first-child{grid-column:1/-1}.field-toolbar label select{width:100%}.field-toolbar>.field-btn{grid-column:span 1}.field-stats{gap:9px}.field-stat{padding:13px;min-height:120px}.field-stat strong{font-size:21px}.field-report-balance{padding:20px}.field-pending>div:first-child{grid-template-columns:1fr}.field-hero-actions .field-btn{flex:1}.field-safe-hero{padding:21px}.field-safe-icon{display:none}.field-safe-hero h2{font-size:21px}.field-actions .field-btn{flex:1}.field-whatsapp-enhance>div .field-btn{flex:1}.field-report-balance>div:first-child strong{font-size:34px}}
+
+/* Abastecimiento por etapas */
+.field-board-intro{font-size:12px;color:#aec2a9;background:#1d2c20;border:1px solid #39503a;border-radius:9px;padding:13px 16px;line-height:1.7;margin-bottom:14px}
+.field-board-intro b{color:#f1cb8f}
+.field-board{display:grid;grid-template-columns:repeat(5,minmax(220px,1fr));gap:12px;overflow-x:auto;padding:1px 1px 18px;align-items:start}
+.field-lane{min-width:220px;max-height:850px;display:flex;flex-direction:column;background:#18231a;border:1px solid #364537;border-radius:11px;overflow:hidden}
+.field-lane-title{display:flex;align-items:center;justify-content:space-between;padding:14px;border-bottom:1px solid #344536}
+.field-lane-title>div{display:flex;align-items:center;gap:8px;font-size:12px}
+.field-lane-title>span{background:#2a392b;padding:4px 8px;border-radius:5px;font-weight:800;color:#e6e2d2}
+.field-lane-dot{width:9px;height:9px;background:#97a5a0;border-radius:3px;display:inline-block}
+.field-lane-dot.stage-1{background:#d8bd7e}.field-lane-dot.stage-2{background:#d9ad69}.field-lane-dot.stage-3{background:#95c2a2}.field-lane-dot.stage-4{background:#a9d58e}
+.field-lane-body{padding:11px;overflow:auto;min-height:180px;max-height:740px}
+.field-lane-empty{height:160px;display:grid;place-items:center;text-align:center;color:#889d89;font-size:11px;border:1px dashed #3b4d3d;border-radius:9px;padding:14px}
+.field-request{background:#233227;border:1px solid #455943;border-radius:9px;padding:13px;margin-bottom:10px}
+.field-request:last-child{margin-bottom:0}
+.field-request-top{display:flex;align-items:center;justify-content:space-between;gap:7px}
+.field-request-top>span:first-child{color:#e0be89;font-family:ui-monospace,monospace;font-size:11px;font-weight:780}
+.field-urgency{font-size:10px;color:#cbddbb;background:#324332;border-radius:4px;padding:4px 6px;font-weight:700}
+.field-urgency.urgent{background:#594727;color:#f6cc86}
+.field-urgency.critical{background:#6a372d;color:#ffb6a6}
+.field-request h3{font-size:12px;line-height:1.6;white-space:normal;margin:13px 0 11px;max-height:100px;overflow:hidden;font-weight:730;color:#eef3e3;overflow-wrap:anywhere}
+.field-request-work{color:#c8d5c1;font-size:10px;padding:9px 0;border-top:1px solid #3b4f3b}
+.field-request-meta{display:flex;justify-content:space-between;gap:8px;color:#aabb9d;font-size:10px;flex-wrap:wrap}
+.field-request-meta .late{color:#f5ae8b}
+.field-request-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:14px}
+.field-request-actions .field-btn{grid-column:1/-1;padding:9px;font-size:11px}
+.field-mini,.field-oc{background:#344b37;border:1px solid #587054;border-radius:7px;color:#e6eadc;font-size:10px;padding:8px 7px;cursor:pointer}
+.field-mini:hover,.field-oc:hover{background:#46634a}
+.field-oc{width:100%;margin-top:8px;background:#4b402b;border-color:#826b45;color:#f9d19b;font-weight:770}
+@media(max-width:1260px){.field-board{grid-template-columns:repeat(5,minmax(215px,1fr))}}
+@media(max-width:640px){.field-board{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:15px}.field-lane{flex:0 0 min(83vw,295px);scroll-snap-align:start;max-height:70vh}.field-lane-body{max-height:60vh}}
