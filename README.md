@@ -60,3 +60,25 @@ La app web vive en \`web/\` y conserva el programa de escritorio Python/SQLite p
 **No uses información sensible real**: la web carece todavía de inicio de sesión, permisos de usuario y base de datos centralizada. Los datos son locales a cada navegador; borrar sus datos puede destruir los registros. El respaldo JSON actual **no** incluye fotos ni PDFs de IndexedDB: estos deben descargarse por separado. La bitácora y hash locales no sustituyen una auditoría del servidor. WhatsApp se abre con enlace \`wa.me\`: **no recibe mensajes automáticamente, no envía en segundo plano ni comprueba entrega**. La integración automática requiere autorización y configuración de Meta WhatsApp Cloud API, webhook y base de datos con autenticación.
 
 **Despliegue:** Vercel conectado a rama \`main\` del repositorio GitHub, con directorio raíz \`web\`.
+
+
+## v5 · Herramientas de campo (noviembre 2026)
+
+La interfaz web de \`web/\` incorpora tres espacios de trabajo independientes, conservando la estructura de registros de v4:
+
+1. **Rendición PRO**: resumen de fondos de empresa, gastos propios, reembolsos, devoluciones, saldo por rendir, distribución por categorías, movimientos y comprobantes en el periodo. Descarga CSV compatible con Excel o impresión/guardado como PDF; permite preparar resumen para enviar manualmente por WhatsApp. **Registrar una compra no constituye automáticamente un pago.**
+2. **Tareo masivo de cuadrilla**: asistencia de trabajadores por obra y fecha, selección múltiple, horas, faltas, descansos y observaciones. Si ya existe un tareo por trabajador/obra/día se actualiza y **no se duplica**. Exporta CSV para revisión.
+3. **Respaldo integral**: genera un JSON con todas las tablas, bitácora local, mensajes preparados para WhatsApp y **archivos de evidencias (fotos y PDFs)** guardados en IndexedDB. Los adjuntos se verifican con SHA-256 al restaurar. Límite de 40 MB de evidencias y 65 MB para restauración. Restaura reemplazando datos locales, únicamente después de confirmación expresa.
+
+También incluye:
+- Mayor control de pagos: no permite reducir una compra por debajo de pagos registrados ni registrar el mismo número de factura/boleta para un proveedor.
+- Registro de reembolsos limitado al saldo de gastos propios de la obra; control de documentos de identidad duplicados.
+- Mensajes de WhatsApp preparados manualmente para pendientes prioritarios y resúmenes de rendiciones, **sin** automatizaciones ni conexión a la Cloud API.
+- Archivos \`manifest.webmanifest\` y \`sw.js\` para acceso directo / instalación según compatibilidad del navegador y acceso a interfaz estática sin conexión. Los datos no se sincronizan.
+- Continúan habilitados los módulos de compras, caja, compras pendientes, requerimientos, almacén, planillas registradas, custodia, maquinaria y valorizaciones.
+
+### Precauciones obligatorias
+
+La versión web **no tiene autenticación ni base de datos remota**; cualquiera que acceda a la URL puede abrir una instancia local vacía en su navegador, pero no puede consultar directamente los registros que estén en otro navegador porque se guardan localmente. Este almacenamiento **no es adecuado para datos sensibles ni producción**. El historial local y hashes no representan auditoría inviolable. Los respaldos integrales contienen datos sin cifrado: consérvalos protegidos. El botón lateral **«Respaldo básico (sin fotos)» no incluye adjuntos**; utiliza «Respaldo integral» para eso. Las funciones «Imprimir/PDF» usan la función de imprimir del navegador; Excel se entrega como CSV, no XLSX.
+
+Para una solución de producción: usuarios/roles y segundo factor, base de datos persistente protegida, almacenamiento privado de fotografías y PDF, auditoría de servidor, respaldos automáticos, integración de WhatsApp Business Cloud API mediante Meta (webhooks, tokens y aprobación). Evitar introducir tokens de Meta en código o repositorio públicos.
