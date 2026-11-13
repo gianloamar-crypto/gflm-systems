@@ -1,0 +1,23 @@
+{
+  "name": "GFLM Systems · Field Operations",
+  "short_name": "GFLM Systems",
+  "description": "Administración de obras: compras, requerimientos, rendiciones, tareos y WhatsApp asistido.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "background_color": "#0a0f0c",
+  "theme_color": "#0a0f0c",
+  "lang": "es-PE",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
