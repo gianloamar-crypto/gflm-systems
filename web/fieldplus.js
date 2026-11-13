@@ -140,9 +140,9 @@ function crewData(){
  for(const tr of trs){
   const check=tr.querySelector(".field-attend");if(!check?.checked)continue;
   const workerId=Number(tr.dataset.crew),attendance=tr.querySelector(".field-status").value,
-   hours=n(tr.querySelector(".field-hours").value),note=tr.querySelector(".field-note").value.trim();
+   rawHours=tr.querySelector(".field-hours").value,hours=Number(rawHours),note=tr.querySelector(".field-note").value.trim();
   if(!get("personal").some(x=>x.id===workerId))throw Error("Trabajador no encontrado");
-  if(!Number.isFinite(hours)||hours<0||hours>24)throw Error("Horas inválidas en un trabajador");
+  if(rawHours===""||!Number.isFinite(hours)||hours<0||hours>24)throw Error("Horas inválidas en un trabajador");
   if(attendance!=="Asistió"&&hours>0)throw Error("Falta, descanso, permiso y vacaciones deben tener cero horas trabajadas");
   items.push({workerId,asistencia:attendance,horas:String(hours),notas:note});
  }
@@ -249,16 +249,16 @@ async function restoreFullBackup(file){
   const originalData=JSON.parse(JSON.stringify(G.db)),originalWsp=localStorage.getItem(WSP);
   // Guardar datos de texto antes de reemplazar las evidencias; si falla, no se alteran adjuntos.
   try{localStorage.setItem(BASE,JSON.stringify(normalized));localStorage.setItem(WSP,JSON.stringify(pkg.whatsapp||{}));}
-  catch(err){localStorage.setItem(BASE,JSON.stringify(originalData));if(originalWsp!==null)localStorage.setItem(WSP,originalWsp);throw Error("Sin espacio para restaurar los registros");}
+  catch(err){localStorage.setItem(BASE,JSON.stringify(originalData));if(originalWsp!==null)localStorage.setItem(WSP,originalWsp);else localStorage.removeItem(WSP);throw Error("Sin espacio para restaurar los registros");}
   const db=await openEvidenceDb();
   try{await new Promise((resolve,reject)=>{
    const tx=db.transaction("files","readwrite"),store=tx.objectStore("files");store.clear();
    validFiles.forEach(f=>store.add(f));
    tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||Error("Error de almacenamiento"));tx.onabort=()=>reject(Error("Se interrumpió la restauración"));
-  });}catch(err){localStorage.setItem(BASE,JSON.stringify(originalData));if(originalWsp!==null)localStorage.setItem(WSP,originalWsp);throw err;}finally{db.close();}
+  });}catch(err){localStorage.setItem(BASE,JSON.stringify(originalData));if(originalWsp!==null)localStorage.setItem(WSP,originalWsp);else localStorage.removeItem(WSP);throw err;}finally{db.close();}
   Object.keys(G.models).forEach(k=>G.db.tables[k]=normalized.tables[k]);
   G.db.audit=normalized.audit;
-  G.render();G.notify("Respaldo integral restaurado. Vuelve a abrir WhatsApp para ver la configuración importada.");
+  G.render();G.notify("Respaldo integral restaurado. Actualiza la página para cargar la configuración importada de WhatsApp.");
  }catch(err){G.notify("Restauración fallida: "+err.message,true);}
  finally{busy=false;}
 }
