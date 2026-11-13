@@ -47,6 +47,60 @@ function finance(){
  const unbacked=moves.filter(r=>r.tipo==="Gasto"&&["Sin comprobante","Factura pendiente"].includes(r.comprobante));
  return {moves,purchases,summary,categories,sources,pendingDocs,unbacked,works};
 }
+
+let boardMode=localStorage.getItem("gflm-req-vista")!=="tabla";
+let boardFilter={obra:"",priority:""};
+const PIPELINE=["Pendiente","En cotización","Aprobado","Comprado","Entregado"];
+function requestBoard(){
+ const list=get("requerimientos").filter(x=>(!boardFilter.obra||x.obra===boardFilter.obra)&&(!boardFilter.priority||x.prioridad===boardFilter.priority));
+ const closed=list.filter(x=>x.estado==="Cerrado").length,open=list.filter(x=>PIPELINE.includes(x.estado));
+ const overdue=open.filter(x=>x.entrega&&x.entrega<current()).length,critical=open.filter(x=>x.prioridad==="Crítica").length;
+ let html='<div class="field-version field-kanban">'+header("REQUERIMIENTOS · SEGUIMIENTO","Tablero de abastecimiento","De la solicitud a la entrega: seguimiento visual, responsables y fechas comprometidas.")+note()+
+ '<div class="field-toolbar"><label>Filtrar obra<select id="fieldBoardObra" class="ops-input">'+projects(boardFilter.obra,true)+'</select></label>'+
+ '<label>Prioridad<select id="fieldBoardPriority" class="ops-input">'+options(boardFilter.priority,[["","Todas"],["Normal","Normal"],["Urgente","Urgente"],["Crítica","Crítica"]])+'</select></label>'+
+ btn("board-new","＋ Nuevo requerimiento","primary")+btn("board-table","☷ Vista tabla")+'</div>'+
+ '<div class="field-stats">'+metric("En atención",open.length,"Solicitudes en el circuito")+
+ metric("Prioridad crítica",critical,"Atender antes que el resto","attention")+
+ metric("Vencidos",overdue,"Fecha límite anterior a hoy","attention")+
+ metric("Cerrados",closed,"Requerimientos finalizados")+'</div>'+
+ '<div class="field-board-intro">Para cambiar un requerimiento, pulsa <b>Avanzar etapa</b>. El sistema pedirá confirmación y registrará el cambio en el historial local. Si recibes material, registra también la entrada real en almacén y conserva la guía firmada.</div><div class="field-board">';
+ PIPELINE.forEach((stage,idx)=>{
+  const items=open.filter(x=>x.estado===stage).sort((a,b)=>({Crítica:0,Urgente:1,Normal:2}[a.prioridad]??3)-({Crítica:0,Urgente:1,Normal:2}[b.prioridad]??3)||String(a.entrega||"").localeCompare(String(b.entrega||"")));
+  html+='<section class="field-lane"><div class="field-lane-title"><div><span class="field-lane-dot stage-'+idx+'"></span><b>'+e(stage)+'</b></div><span>'+items.length+'</span></div><div class="field-lane-body">';
+  if(!items.length)html+='<div class="field-lane-empty">Ninguna solicitud en esta etapa</div>';
+  items.forEach(x=>{
+   const late=!!(x.entrega&&x.entrega<current());
+   const urgency=x.prioridad==="Crítica"?"critical":x.prioridad==="Urgente"?"urgent":"";
+   html+='<article class="field-request"><div class="field-request-top"><span>REQ-'+e(x.id)+'</span><span class="field-urgency '+urgency+'">'+e(x.prioridad||"Normal")+'</span></div>'+
+   '<h3>'+e(x.detalle)+'</h3><div class="field-request-work">▤ '+e(x.obra||"Obra sin definir")+'</div>'+
+   '<div class="field-request-meta"><span>'+e(x.solicitante||"Sin solicitante")+'</span><span class="'+(late?"late":"")+'">◷ '+e(x.entrega||"Sin fecha")+'</span></div>'+
+   '<div class="field-request-actions">'+btn("board-next:"+x.id,"Avanzar →","primary")+ 
+   '<button type="button" class="field-mini" data-edit="requerimientos:'+e(x.id)+'">Editar</button>'+
+   '<button type="button" class="field-mini" data-op="wsp-alert:requerimientos:'+e(x.id)+'">WhatsApp</button></div>';
+   if(stage==="Aprobado")html+='<button type="button" class="field-oc" data-flow="oc:'+e(x.id)+'">Generar orden de compra →</button>';
+   html+='</article>';
+  });
+  html+='</div></section>';
+ });
+ html+='</div><div class="field-bottom-note">En esta vista no se muestran las solicitudes canceladas ni cerradas. Para consultar o modificarlas, utiliza «Vista tabla».</div></div>';
+ return html;
+}
+function advanceRequest(id){
+ const row=get("requerimientos").find(x=>String(x.id)===String(id));
+ if(!row){G.notify("Requerimiento no encontrado.",true);return;}
+ const idx=PIPELINE.indexOf(row.estado),next=idx===PIPELINE.length-1?"Cerrado":PIPELINE[idx+1];
+ if(idx<0){G.notify("Este requerimiento no está en una etapa que pueda avanzar.",true);return;}
+ if(!confirm("¿Cambiar REQ-"+row.id+" de «"+row.estado+"» a «"+next+"»?\nVerifica antes la entrega física y su sustento cuando corresponda."))return;
+ const previous=row.estado,previousNotes=row.notas||"",previousUpdated=row.updatedAt;
+ row.estado=next;row.updatedAt=new Date().toISOString();
+ row.notas=(previousNotes?previousNotes+"\n":"")+"["+new Date().toLocaleString("es-PE")+"] Etapa "+previous+" → "+next+" (confirmación manual).";
+ if(!G.saveAudit("AVANZAR REQUERIMIENTO","requerimientos",row)){
+  row.estado=previous;row.notas=previousNotes;row.updatedAt=previousUpdated;
+  G.notify("No se pudo guardar el cambio.",true);return;
+ }
+ G.render();G.notify("REQ-"+row.id+" actualizado a "+next+".");
+}
+
 function rendicion(){
  const r=finance(),s=r.summary,moves=[...r.moves].sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha))||b.id-a.id);
  let html='<div class="field-version">'+header("GERENCIA · CONTROL DE FONDOS","Rendición de obra","Depósitos, gastos, comprobantes y dinero personal en un solo informe que puedes imprimir o exportar.")+
@@ -305,6 +359,7 @@ function afterRender(page){
    '<button class="nav-link '+(page==="seguridad"?"active":"")+'" data-nav="seguridad"><span class="nav-icon">◈</span><span>Respaldo integral</span></button>');
  }
  if(["rendicion","cuadrilla","seguridad"].includes(page))document.getElementById("addBtn").style.display="none";
+ if(page==="requerimientos"&&!boardMode){const toolbar=document.querySelector(".toolbar");if(toolbar&&!document.getElementById("fieldBoardToggle")){const toggle=document.createElement("button");toggle.id="fieldBoardToggle";toggle.className="field-btn primary";toggle.type="button";toggle.dataset.field="board-kanban";toggle.textContent="▦ Vista tablero";toolbar.prepend(toggle);}}
  if(page==="whatsapp")addWspEnhancements();
  if(page==="dashboard"&&!document.getElementById("fieldQuickBar")){
   const dash=document.querySelector(".ops-rapid");
@@ -314,10 +369,13 @@ function afterRender(page){
   }
  }
 }
-Ops.view=function(page){if(page==="rendicion")return rendicion();if(page==="cuadrilla")return cuadrilla();if(page==="seguridad")return backupView();return oldView(page);};
+Ops.view=function(page){if(page==="requerimientos"&&boardMode)return requestBoard();if(page==="rendicion")return rendicion();if(page==="cuadrilla")return cuadrilla();if(page==="seguridad")return backupView();return oldView(page);};
 Ops.afterRender=afterRender;
 async function action(action){
  if(action.startsWith("goto:")){G.changePage(action.slice(5));return;}
+ if(action==="board-table"||action==="board-kanban"){boardMode=action==="board-kanban";localStorage.setItem("gflm-req-vista",boardMode?"tablero":"tabla");G.render();return;}
+ if(action==="board-new"){G.showForm("requerimientos");return;}
+ if(action.startsWith("board-next:")){advanceRequest(action.slice(11));return;}
  if(action==="report-print"){reportPrint();return;}
  if(action==="report-csv"){exportReport();return;}
  if(action==="report-wsp"){ensureWspDraft(reportMessage(),"rendiciones");return;}
@@ -339,7 +397,8 @@ async function action(action){
 document.addEventListener("click",function(ev){const el=ev.target.closest("[data-field]");if(!el)return;ev.preventDefault();action(el.dataset.field).catch?.(err=>G.notify(err.message,true));});
 document.addEventListener("change",function(ev){
  const el=ev.target;
- if(["fieldObra","fieldDesde","fieldHasta"].includes(el.id)){filters.obra=document.getElementById("fieldObra")?.value||"";filters.desde=document.getElementById("fieldDesde")?.value||"";filters.hasta=document.getElementById("fieldHasta")?.value||"";G.render();}
+ if(["fieldBoardObra","fieldBoardPriority"].includes(el.id)){boardFilter.obra=document.getElementById("fieldBoardObra")?.value||"";boardFilter.priority=document.getElementById("fieldBoardPriority")?.value||"";G.render();}
+ else if(["fieldObra","fieldDesde","fieldHasta"].includes(el.id)){filters.obra=document.getElementById("fieldObra")?.value||"";filters.desde=document.getElementById("fieldDesde")?.value||"";filters.hasta=document.getElementById("fieldHasta")?.value||"";G.render();}
  else if(["fieldCrewObra","fieldCrewFecha"].includes(el.id)){tareo.obra=document.getElementById("fieldCrewObra")?.value||"";tareo.fecha=document.getElementById("fieldCrewFecha")?.value||current();G.render();}
  else if(el.id==="fieldRestoreFile"){restoreFullBackup(el.files[0]);el.value="";}
  else if(el.classList?.contains("field-status")){const row=el.closest("tr"),hours=row?.querySelector(".field-hours");if(hours)hours.value=el.value==="Asistió"?"8":"0";}
