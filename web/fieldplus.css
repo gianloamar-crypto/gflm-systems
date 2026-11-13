@@ -1,0 +1,77 @@
+/* Field Operations v5 — flujo de trabajo */
+.field-version{animation:ops-enter .22s ease both;color:#f1f0df}
+.field-heading{display:flex;justify-content:space-between;align-items:center;gap:18px;margin:0 0 22px}
+.field-heading h1{font-size:clamp(29px,3.3vw,41px);letter-spacing:-1.25px;font-weight:850;margin:1px 0 8px}
+.field-heading p{color:#a5b4a2;margin:0;font-size:13px;line-height:1.6;max-width:760px}
+.field-heading-mark{font-size:28px;font-weight:900;color:#e8bd78;background:#2d3020;border:1px solid #5d6642;border-radius:10px;padding:10px 15px;white-space:nowrap}
+.field-heading-mark span{color:#647555}
+.field-private{padding:13px 16px;margin-bottom:18px;border:1px solid #625236;border-radius:9px;background:#382e2070;color:#e0cba2;font-size:12px;line-height:1.5}
+.field-private b{color:#ffe1aa}
+.field-btn{background:#27372a;border:1px solid #465a43;color:#e7eadc;border-radius:8px;padding:11px 14px;font-size:12px;font-weight:760;cursor:pointer;white-space:normal;transition:filter .15s,transform .15s}
+.field-btn:hover{filter:brightness(1.15);transform:translateY(-1px)}
+.field-btn.primary{background:#e9bc73;border-color:#ebc884;color:#202015}
+.field-btn:focus-visible{outline:2px solid #f2d396;outline-offset:2px}
+.field-toolbar{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;padding:14px;border-radius:12px;background:#161f17;border:1px solid #354336;margin-bottom:18px}
+.field-toolbar label{font-size:11px;color:#acbca7;font-weight:720;display:flex;flex-direction:column;gap:6px}
+.field-toolbar select{min-width:192px}.field-toolbar input[type=date]{min-width:145px}
+.field-toolbar>.field-btn{min-height:42px}
+.field-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0 0 16px}
+.field-stat{background:#17251b;border:1px solid #354939;border-radius:11px;padding:17px;min-height:125px;min-width:0}
+.field-stat span{color:#a9baa5;font-size:11px;display:block;font-weight:680}
+.field-stat strong{color:#eef0dc;display:block;font-size:clamp(22px,2.4vw,29px);letter-spacing:-.8px;line-height:1.25;margin:13px 0 9px;overflow-wrap:anywhere}
+.field-stat small{display:block;color:#8fa18d;font-size:10px;line-height:1.45}
+.field-stat.attention{background:#30291d;border-color:#735d3c}
+.field-stat.attention strong{color:#f1c981}
+.field-report-balance{display:grid;grid-template-columns:1.45fr 1fr;gap:24px;align-items:center;padding:25px 28px;background:linear-gradient(125deg,#e9bf7b,#d3a05a);color:#24241c;border-radius:12px;margin-bottom:17px;overflow:hidden}
+.field-report-balance>div:first-child span{display:block;font-size:11px;letter-spacing:1.7px;font-weight:850;color:#57472f}
+.field-report-balance>div:first-child strong{display:block;font-weight:930;letter-spacing:-1.5px;font-size:clamp(31px,3.5vw,44px);margin:10px 0}
+.field-report-balance>div:first-child small{display:block;font-size:11px;color:#5d4c35}
+.field-report-mini{display:grid;grid-template-columns:1fr auto;gap:8px 20px;font-size:12px;border-left:1px solid #8b6a3e;padding-left:20px}
+.field-report-mini span{color:#56472e}.field-report-mini b{text-align:right;font-size:13px}
+.field-two{display:grid;grid-template-columns:1.1fr 1fr;gap:16px;margin-bottom:17px}
+.field-panel{background:#16231a;border:1px solid #34493a;border-radius:12px;overflow:hidden;margin-bottom:16px}
+.field-panel-title{padding:19px 21px 16px;border-bottom:1px solid #354738}
+.field-panel-title h2{font-size:18px;margin:0;letter-spacing:-.3px}
+.field-bars{padding:20px 21px}.field-bar-row{margin-bottom:19px}.field-bar-row:last-child{margin:0}
+.field-bar-row>div:first-child{display:flex;justify-content:space-between;gap:12px;color:#d9e2cf;font-size:12px;margin-bottom:9px}
+.field-bar-row>div:first-child span{color:#e7ba78;font-weight:750}
+.field-bar{background:#314035;height:7px;border-radius:100px;overflow:hidden}
+.field-bar span{background:linear-gradient(90deg,#a1bf7a,#e6ba76);height:100%;display:block;border-radius:100px}
+.field-pending{padding:20px}.field-pending>div:first-child{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.field-pending .field-stat{padding:13px;min-height:113px}.field-pending .field-stat strong{font-size:29px}
+.field-pending>p{color:#9baf99;font-size:11px;line-height:1.6;margin:15px 0}
+.field-table-scroller{width:100%;overflow:auto}
+.field-table{width:100%;border-collapse:collapse;min-width:770px;white-space:nowrap}
+.field-table th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.5px;font-weight:800;color:#adbea9;background:#223126;padding:13px 14px;border-bottom:1px solid #3b523c}
+.field-table td{padding:13px 14px;border-bottom:1px solid #2c4130;color:#dce6d7;font-size:11px;max-width:320px;overflow:hidden;text-overflow:ellipsis}
+.field-table tbody tr:hover td{background:#26392999}
+.field-table td small{display:block;color:#8fa48b;font-size:10px;margin-top:5px}
+.field-table tr:last-child td{border-bottom:0}
+.field-bottom-note{font-size:11px;color:#99ae96;border-top:1px solid #304235;padding:13px 20px;line-height:1.5}
+.field-empty{padding:27px;color:#a9bca9;font-size:12px;text-align:center}
+.field-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin:18px 0}
+.crew-stats{margin-bottom:16px}
+#fieldCrewTable{min-width:750px}
+#fieldCrewTable tr td:first-child input{accent-color:#cba46a;height:17px;width:17px}
+#fieldCrewTable .ops-input{padding:9px;min-width:85px;font-size:11px}
+#fieldCrewTable .field-status{min-width:120px}
+#fieldCrewTable .field-hours{max-width:92px}
+#fieldCrewTable .field-note{min-width:160px}
+.field-safe-hero{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;background:linear-gradient(115deg,#253a29,#1a2c21);border:1px solid #456047;border-radius:12px;padding:27px 28px;margin-bottom:17px}
+.field-safe-hero h2{font-size:25px;line-height:1.2;margin:0 0 12px;letter-spacing:-.7px}
+.field-safe-hero p{color:#bdd0b3;line-height:1.65;max-width:730px;font-size:12px}
+.field-safe-hero>div>small{display:block;color:#a4b9a4;margin-top:17px;font-size:10px}
+.field-hero-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+.field-safe-icon{display:flex;align-items:center;justify-content:center;min-width:90px;height:90px;border:1px solid #66835d;background:#374b34;border-radius:15px;color:#e9bd7a;font-size:48px}
+.field-protection{display:grid;grid-template-columns:repeat(3,1fr);gap:17px;padding:20px}
+.field-protection>div{border:1px solid #3b503e;border-radius:9px;padding:17px;background:#1d2e20}
+.field-protection b{display:block;color:#e4d8b4;font-size:12px;line-height:1.45}
+.field-protection p{color:#a5b99f;font-size:11px;line-height:1.8;margin:8px 0 0}
+.field-dashboard-actions{display:flex;gap:9px;flex-wrap:wrap;margin:-6px 0 17px}
+.field-whatsapp-enhance{border:1px solid #526747;background:#203423;padding:14px 15px;border-radius:10px;margin-bottom:16px}
+.field-whatsapp-enhance b{color:#e9d9b1;font-size:12px}
+.field-whatsapp-enhance p{color:#adbea7;font-size:11px;margin:7px 0 12px}
+.field-whatsapp-enhance>div{display:flex;gap:8px;flex-wrap:wrap}
+.field-whatsapp-enhance>small{display:block;color:#a0b99d;margin-top:10px;font-size:10px}
+@media(max-width:1050px){.field-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.field-two{grid-template-columns:1fr}.field-report-balance{grid-template-columns:1fr}.field-report-mini{border-left:0;border-top:1px solid #856c42;padding:17px 0 0}.field-protection{grid-template-columns:1fr}}
+@media(max-width:650px){.field-heading{align-items:flex-start}.field-heading-mark{display:none}.field-heading h1{font-size:31px}.field-toolbar{display:grid;grid-template-columns:1fr 1fr}.field-toolbar label:first-child{grid-column:1/-1}.field-toolbar label select{width:100%}.field-toolbar>.field-btn{grid-column:span 1}.field-stats{gap:9px}.field-stat{padding:13px;min-height:120px}.field-stat strong{font-size:21px}.field-report-balance{padding:20px}.field-pending>div:first-child{grid-template-columns:1fr}.field-hero-actions .field-btn{flex:1}.field-safe-hero{padding:21px}.field-safe-icon{display:none}.field-safe-hero h2{font-size:21px}.field-actions .field-btn{flex:1}.field-whatsapp-enhance>div .field-btn{flex:1}.field-report-balance>div:first-child strong{font-size:34px}}
